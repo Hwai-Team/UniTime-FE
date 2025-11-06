@@ -1,0 +1,77 @@
+<<<<<<< HEAD
+# ------------------------
+# OS / 시스템 파일
+# ------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------
+# IntelliJ / JetBrains IDE
+# ------------------------
+.idea/
+*.iml
+
+# ------------------------
+# Gradle / Maven 빌드 산출물
+# ------------------------
+/build/
+/out/
+/target/
+
+# ------------------------
+# 로그 / 캐시 파일
+# ------------------------
+*.log
+*.class
+
+# ------------------------
+# 환경 변수 / 보안 파일
+# ------------------------
+.env
+application-*.yml
+application-*.properties
+
+# ------------------------
+# 기타 (테스트 커버리지, 임시 파일 등)
+# ------------------------
+/coverage/
+/tmp/
+/*.swp
+=======
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+>>>>>>> 0b42ad3 (🚀 Deploy: initial files)
