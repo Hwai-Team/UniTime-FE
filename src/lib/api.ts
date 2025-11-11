@@ -1,3 +1,4 @@
+// api.ts
 const DEFAULT_API_ORIGIN = 'https://unitime-be.onrender.com';
 
 const cleanEnvOrigin = import.meta.env.VITE_API_BASE_URL
@@ -26,10 +27,12 @@ const API_BASE_URL = (() => {
       hostname.endsWith('.local');
 
     if (!isLocalHost) {
+      // 배포 환경에서 리버스 프록시(/api) 사용
       return '/api';
     }
   }
 
+  // 그 외에는 백엔드 기본 ORIGIN으로 직접 호출
   return `${DEFAULT_API_ORIGIN}/api`;
 })();
 
@@ -143,6 +146,73 @@ export interface SendChatResponse {
   data?: ChatHistoryItem[];
 }
 
+export interface CreateAiTimetableRequest {
+  userId: number;
+  message: string;
+  year: number;
+  semester: number;
+}
+
+export interface AiTimetableItem {
+  id: number;
+  courseName: string;
+  dayOfWeek: string;
+  startPeriod: number;
+  endPeriod: number;
+  room: string | null;
+  category: string;
+}
+
+export interface CreateAiTimetableResponse {
+  id: number;
+  owner?: {
+    id: number;
+    email?: string;
+    name?: string;
+    department?: string;
+    grade?: number;
+    studentId?: string;
+    graduationYear?: number;
+  } | null;
+  title: string;
+  year: number;
+  semester: number;
+  createdAt: string;
+  updatedAt: string;
+  items: AiTimetableItem[];
+  resultSummary?: string | null;
+}
+
+export interface SaveAiTimetableRequest {
+  userId: number;
+  timetableId: number;
+  resultSummary?: string;
+}
+
+export interface SaveAiTimetableResponse {
+  id: number;
+  userId: number;
+  timetableId: number;
+  prompt: string | null;
+  title: string | null;
+  userName: string | null;
+  message: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+}
+
+export interface SavedAiTimetableEntry {
+  id: number;
+  userId: number;
+  timetableId: number;
+  prompt: string | null;
+  title: string | null;
+  userName: string | null;
+  message: string | null;
+  resultSummary: string | null;
+  createdAt: string;
+}
+
 export interface ApiFieldError {
   field: string;
   message: string;
@@ -179,6 +249,7 @@ export const tokenStorage = {
     if (!storageAvailable) return;
     if (accessToken) {
       window.localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+      // 호환용 키도 같이 저장
       window.localStorage.setItem(COMPAT_AUTH_TOKEN_KEY, accessToken);
     }
     if (refreshToken) {
@@ -210,15 +281,13 @@ function createFetchOptions(
     }
   }
 
-  const options: RequestInit = {
-    method,
-    headers,
-  };
+  const options: RequestInit = { method, headers };
 
   if (body !== undefined) {
     options.body = JSON.stringify(body);
   }
 
+  // 배포 또는 외부 ORIGIN 사용 시 CORS 모드
   if (!isDevelopment || cleanEnvOrigin) {
     options.mode = 'cors';
   }
@@ -262,7 +331,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
     throw error;
   }
 
-  return (parsed as T) ?? ({} as T);
+  // 비어있는 본문 처리
+  if (!text) return {} as T;
+
+  return parsed as T;
 }
 
 function normaliseUser(
@@ -367,7 +439,8 @@ export async function updateProfile(
   } catch (error) {
     const apiError = error as ApiError;
     if (apiError.status === 404) {
-      return attempt('uesrs/me'); // fallback for potential backend typo
+      // 백엔드 오타 대응
+      return attempt('uesrs/me');
     }
     throw error;
   }
@@ -390,7 +463,10 @@ export async function getChatHistory(
     `${API_BASE_URL}/chat/history/${userId}`,
     createFetchOptions('GET', undefined, true),
   );
-  const result = await handleResponse<ChatHistoryItem[] | { data?: ChatHistoryItem[] }>(response);
+  const result = await handleResponse<
+    ChatHistoryItem[] | { data?: ChatHistoryItem[] }
+  >(response);
+
   if (Array.isArray(result)) return result;
   return result.data ?? [];
 }
@@ -405,3 +481,47 @@ export async function deleteChatHistory(
   return handleResponse<{ message?: string }>(response);
 }
 
+export async function createAiTimetable(
+  data: CreateAiTimetableRequest,
+): Promise<CreateAiTimetableResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/timetables/ai`,
+    createFetchOptions('POST', data, true),
+  );
+  return handleResponse<CreateAiTimetableResponse>(response);
+}
+
+export async function saveAiTimetable(
+  data: SaveAiTimetableRequest,
+): Promise<SaveAiTimetableResponse> {
+  const response = await fetch(
+    `${API_BASE_URL}/timetables/ai`,
+    createFetchOptions('PUT', data, true),
+  );
+  return handleResponse<SaveAiTimetableResponse>(response);
+}
+
+export async function getAiTimetables(
+  userId: number,
+): Promise<SavedAiTimetableEntry[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/timetables/ai?userId=${userId}`,
+    createFetchOptions('GET', undefined, true),
+  );
+  const result = await handleResponse<
+    SavedAiTimetableEntry[] | { data?: SavedAiTimetableEntry[] }
+  >(response);
+
+  if (Array.isArray(result)) return result;
+  return result.data ?? [];
+}
+
+export async function deleteAiTimetables(
+  userId: number,
+): Promise<{ message?: string }> {
+  const response = await fetch(
+    `${API_BASE_URL}/timetables/ai?userId=${userId}`,
+    createFetchOptions('DELETE', undefined, true),
+  );
+  return handleResponse<{ message?: string }>(response);
+}
