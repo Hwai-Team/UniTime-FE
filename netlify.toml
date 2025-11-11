@@ -1,4 +1,9 @@
-# netlify.toml
 [build]
   command = "npm run build"
-  publish = "build"
+  publish = "build" # ← 당신 프로젝트 outDir에 맞춰 유지
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://unitime-be.onrender.com/api/:splat"
+  status = 200
+  force = true
