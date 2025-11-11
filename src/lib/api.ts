@@ -6,11 +6,32 @@ const cleanEnvOrigin = import.meta.env.VITE_API_BASE_URL
 
 const isDevelopment = import.meta.env.DEV;
 
-const API_BASE_URL = cleanEnvOrigin
-  ? `${cleanEnvOrigin}/api`
-  : isDevelopment
-    ? '/api'
-    : `${DEFAULT_API_ORIGIN}/api`;
+const API_BASE_URL = (() => {
+  if (cleanEnvOrigin) {
+    return cleanEnvOrigin.endsWith('/api')
+      ? cleanEnvOrigin
+      : `${cleanEnvOrigin}/api`;
+  }
+
+  if (isDevelopment) {
+    return '/api';
+  }
+
+  if (typeof window !== 'undefined') {
+    const { hostname } = window.location;
+    const isLocalHost =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      hostname.endsWith('.local');
+
+    if (!isLocalHost) {
+      return '/api';
+    }
+  }
+
+  return `${DEFAULT_API_ORIGIN}/api`;
+})();
 
 type Maybe<T> = T | null | undefined;
 
