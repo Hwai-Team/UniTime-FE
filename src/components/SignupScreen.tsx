@@ -145,7 +145,7 @@ export default function SignupScreen({ navigate, setUser }: SignupScreenProps) {
               <Input
                 id="email"
                 type="email"
-                placeholder="이메일 (예: testuser@unitime.com)"
+                placeholder="이메일 (예: @unitime.com)"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="rounded-lg bg-white/5 border-white/15 text-white placeholder:text-white/40 focus:border-purple-500/50 focus:ring-purple-500/20"
