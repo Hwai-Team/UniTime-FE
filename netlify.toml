@@ -1,6 +1,6 @@
 [build]
   command = "npm run build"
-  publish = "build" # ← 당신 프로젝트 outDir에 맞춰 유지
+  publish = "dist" # ← 당신 프로젝트 outDir에 맞춰 유지
 
 [[redirects]]
   from = "/api/*"
