@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # ------------------------
 # OS / 시스템 파일
 # ------------------------
@@ -6,72 +5,45 @@
 Thumbs.db
 
 # ------------------------
-# IntelliJ / JetBrains IDE
+# Node 및 JavaScript
 # ------------------------
-.idea/
-*.iml
-
-# ------------------------
-# Gradle / Maven 빌드 산출물
-# ------------------------
-/build/
-/out/
-/target/
-
-# ------------------------
-# 로그 / 캐시 파일
-# ------------------------
-*.log
-*.class
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
 
 # ------------------------
 # 환경 변수 / 보안 파일
 # ------------------------
 .env
-application-*.yml
-application-*.properties
+.env.*.local
 
 # ------------------------
-# 기타 (테스트 커버리지, 임시 파일 등)
+# 빌드 / 배포 산출물
 # ------------------------
-/coverage/
-/tmp/
-/*.swp
-=======
-.gradle
+dist/
 build/
-!gradle/wrapper/gradle-wrapper.jar
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
-bin/
-!**/src/main/**/bin/
-!**/src/test/**/bin/
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
 out/
-!**/src/main/**/out/
-!**/src/test/**/out/
+.next/
+coverage/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+# ------------------------
+# 로그 / 캐시 파일
+# ------------------------
+*.log
+.cache/
+tmp/
 
-### VS Code ###
+# ------------------------
+# IDE / 에디터 설정
+# ------------------------
+.idea/
 .vscode/
->>>>>>> 0b42ad3 (🚀 Deploy: initial files)
+*.iml
+*.iws
+*.ipr
+
+# ------------------------
+# 기타
+# ------------------------
+*.swp
