@@ -187,6 +187,11 @@ export async function updateCourseTaken(courseId: number, body: UpdateCourseTake
 	});
 }
 
+export async function getTakenCourses(userId: number) {
+	const qs = new URLSearchParams({ userId: String(userId) });
+	return request<number[]>(`/courses/taken?${qs.toString()}`, { method: 'GET' });
+}
+
 // ==================== Timetables ====================
 export interface CreateTimetableRequest {
 	year: number;
@@ -302,6 +307,79 @@ export async function uploadTimetableImage(_file: File): Promise<UploadResponse>
 			],
 		},
 	};
+}
+
+// ==================== Chat ====================
+export interface ChatRequest {
+	userId: number;
+	message: string;
+}
+export interface ChatResponse {
+	reply: string;
+	conversationId: string | null;
+	timetablePlan: boolean;
+	plan: any;
+}
+
+export async function sendChatMessage(body: ChatRequest) {
+	return request<ChatResponse>('/chat', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function getChatHistory(userId: number) {
+	return request<Array<{ id: number; userId: number; role: 'USER' | 'ASSISTANT'; content: string; createdAt: string }>>(
+		`/chat/history/${userId}`,
+		{ method: 'GET' },
+	);
+}
+
+export async function deleteChatHistory(userId: number) {
+	return request<void>(`/chat/history/${userId}`, { method: 'DELETE' });
+}
+
+// ==================== AI Timetable ====================
+export interface AIGenerateButtonVisibilityRequest {
+	userId: number;
+	lastUserMessage: string;
+	recentUserMessages: string[];
+}
+export interface AIGenerateButtonVisibilityResponse {
+	visible: boolean;
+	reason?: string;
+	suggestionText?: string;
+	timetableContextMsg?: string;
+}
+export async function getAIGenerateButtonVisibility(body: AIGenerateButtonVisibilityRequest) {
+	return request<AIGenerateButtonVisibilityResponse>('/timetables/ai-generate/button-visibility', {
+		method: 'POST',
+		body: JSON.stringify(body),
+	});
+}
+
+export interface AIGenerateTimetableRequest {
+	userId: number;
+	message: string;
+	year: number;
+	semester: number; // 1 | 2
+}
+export interface AIGenerateTimetableResponse {
+	id: number;
+	title: string;
+	year: number;
+	semester: number;
+	items: Array<{
+		courseName: string;
+		dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+		startPeriod: number;
+		endPeriod: number;
+		room: string;
+		category: string;
+	}>;
+}
+export async function generateAITimetable(body: AIGenerateTimetableRequest) {
+	return request<AIGenerateTimetableResponse>('/timetables/ai', {
+		method: 'POST',
+		body: JSON.stringify(body),
+	});
 }
 
 // 아래 API들은 현재 화면에서 직접 사용되지 않지만, import 오류를 방지하기 위해

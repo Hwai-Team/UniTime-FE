@@ -37,7 +37,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [currentScreen, setCurrentScreen] = useState<Screen>('welcome');
   const [initialMessage, setInitialMessage] = useState<string>('');
-  const [editingTimetable, setEditingTimetable] = useState<{ title: string; slots: TimeSlot[] } | null>(null);
+  const [editingTimetable, setEditingTimetable] = useState<{ id: number; title: string; slots: TimeSlot[] } | null>(null);
 
   const navigate = (screen: Screen) => {
     setCurrentScreen(screen);
@@ -48,14 +48,12 @@ export default function App() {
     setCurrentScreen('chatbot');
   };
 
-  const handleEditTimetable = (timetable: { title: string; slots: TimeSlot[] }) => {
+  const handleEditTimetable = (timetable: { id: number; title: string; slots: TimeSlot[] }) => {
     setEditingTimetable(timetable);
     setCurrentScreen('timetableEdit');
   };
 
-  const handleSaveTimetable = (slots: TimeSlot[]) => {
-    // Here you would typically save the timetable to your backend or state
-    console.log('Saving timetable:', slots);
+  const handleSaveTimetable = () => {
     setCurrentScreen('profile');
   };
 
