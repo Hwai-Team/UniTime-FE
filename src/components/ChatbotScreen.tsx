@@ -8,6 +8,7 @@ import PurchaseModal from './PurchaseModal';
 import AdBanner from './AdBanner';
 import { toast } from 'sonner';
 import type { User as UserType } from '../App';
+import { getMyProfile, sendChatMessage, getChatHistory, deleteChatHistory, getAIGenerateButtonVisibility, generateAITimetable } from '../lib/api';
 import Logo from './Logo';
 
 interface Message {
@@ -41,8 +42,50 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage 
   const [showAd, setShowAd] = useState(true);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isTimetableGenerating, setIsTimetableGenerating] = useState(false);
+  const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [canGenerate, setCanGenerate] = useState(false);
+  const [generateSuggestion, setGenerateSuggestion] = useState<string>('');
 
-  // Handle initial message from welcome screen
+  // Load user id for chat
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const me = await getMyProfile();
+        if (!mounted) return;
+        setMyUserId(me.userId);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // Load chat history when opening chat (if no initialMessage flow)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!myUserId) return;
+      if (initialMessage) return; // 초기 메시지 플로우를 우선
+      try {
+        const history = await getChatHistory(myUserId);
+        if (!mounted) return;
+        const mapped: Message[] = history.map(h => ({
+          id: String(h.id),
+          text: h.content,
+          sender: h.role === 'USER' ? 'user' : 'ai',
+          timestamp: new Date(h.createdAt),
+        }));
+        setMessages(mapped);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myUserId]);
+
+  // Handle initial message from welcome screen (without placeholder)
   useEffect(() => {
     if (initialMessage && messages.length === 0) {
       const userMessage: Message = {
@@ -52,24 +95,37 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage 
         timestamp: new Date(),
       };
 
+      // push only user message
       setMessages([userMessage]);
       setIsChatLoading(true);
 
-      // AI 응답
-      setTimeout(() => {
-        const aiMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          text: '안녕하세요! 서경대학교 AI 시간표 빌더입니다. 학년과 전공을 알려주시면 최적의 시간표를 만들어드릴게요. 😊',
-          sender: 'ai',
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, aiMessage]);
-        setIsChatLoading(false);
-      }, 1000);
+      (async () => {
+        try {
+          const uid = myUserId ?? (await getMyProfile()).userId;
+          const res = await sendChatMessage({ userId: uid, message: initialMessage });
+          const aiMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            text: res.reply,
+            sender: 'ai',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, aiMessage]);
+        } catch {
+          const aiMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            text: '응답을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+            sender: 'ai',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, aiMessage]);
+        } finally {
+          setIsChatLoading(false);
+        }
+      })();
     }
   }, [initialMessage]);
 
-  const handleSendMessage = (message: string) => {
+  const handleSendMessage = async (message: string) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       text: message,
@@ -77,21 +133,48 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage 
       timestamp: new Date(),
     };
 
+    // optimistic: add only user message
     setMessages(prev => [...prev, userMessage]);
     setIsChatLoading(true);
 
-    // AI 응답 시뮬레이션
-    setTimeout(() => {
-      const aiResponse = generateAIResponse(message, messages.length);
+    try {
+      const uid = myUserId ?? (await getMyProfile()).userId;
+      const res = await sendChatMessage({ userId: uid, message });
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: aiResponse,
+        text: res.reply,
         sender: 'ai',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, aiMessage]);
+
+      // 버튼 가시성 판단
+      const recentUserMessages = [...messages, userMessage]
+        .filter(m => m.sender === 'user')
+        .slice(-5)
+        .map(m => m.text);
+      try {
+        const vis = await getAIGenerateButtonVisibility({
+          userId: uid,
+          lastUserMessage: message,
+          recentUserMessages,
+        });
+        setCanGenerate(!!vis.visible);
+        setGenerateSuggestion(vis.suggestionText || '');
+      } catch {
+        // 실패 시 기존 상태 유지
+      }
+    } catch {
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        text: '응답을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, aiMessage]);
+    } finally {
       setIsChatLoading(false);
-    }, 1200);
+    }
   };
 
   const generateAIResponse = (userInput: string, messageCount: number) => {
@@ -115,39 +198,54 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage 
     return responses[Math.min(messageCount, responses.length - 1)];
   };
 
-  const handleGenerateTimetable = () => {
-    if (messages.length < 2) {
-      toast.error('먼저 AI와 대화를 시작해주세요.');
+  const handleGenerateTimetable = async () => {
+    if (!canGenerate) {
+      toast.error('아직 시간표 생성 조건이 충족되지 않았어요.');
       return;
     }
+    const uid = myUserId ?? (await getMyProfile()).userId;
+    // 사용자 마지막 메시지를 프롬프트로 사용
+    const lastUserMsg = [...messages].reverse().find(m => m.sender === 'user')?.text || '';
+    // 올해/학기 간단 추론
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    const semester = month >= 1 && month <= 6 ? 1 : 2;
 
     setIsTimetableGenerating(true);
-    toast.success('대화 내용을 분석하여 시간표를 생성합니다...');
+    try {
+      const res = await generateAITimetable({ userId: uid, message: lastUserMsg, year, semester });
+      // items -> TimeSlot[] 변환
+      const DAY_MAP: Record<string, string> = { MON: '월', TUE: '화', WED: '수', THU: '목', FRI: '금', SAT: '토', SUN: '일' };
+      // TimetableGrid는 1시간 단위 행을 사용하므로, 시작 시간은 “정시”로 정규화
+      const GENERAL_PERIODS: Record<number, string> = { 1: '09:00', 2: '10:00', 3: '11:00', 4: '12:00', 5: '13:00', 6: '14:00', 7: '15:00', 8: '16:00', 9: '17:00' };
+      // 전공 교시(75분)를 1시간 그리드에 연속되게 매핑 (목업 규칙과 동일)
+      // 21->09:00, 22->10:00, 23->11:00, 24->13:00, 25->15:00, 26->16:00
+      const MAJOR_PERIODS: Record<number, string> = { 21: '09:00', 22: '10:00', 23: '11:00', 24: '13:00', 25: '15:00', 26: '16:00' };
+      const isMajor = (cat: string) => ['전필', '전선', '전심', '전공', '전핵'].some(x => (cat || '').includes(x));
 
-    // 시간표 생성 로직 (샘플 데이터)
-    setTimeout(() => {
-      const sampleTimetable: TimeSlot[] = [
-        { day: '월', time: '09:00', subject: '쇼비즈니스아트', room: '예-307', credits: 3, type: 'major' },
-        { day: '월', time: '10:00', subject: 'World English 2', room: '은2-504', credits: 2, type: 'general' },
-        { day: '월', time: '13:00', subject: '경영학원론', room: '복-203', credits: 3, type: 'major' },
-        { day: '화', time: '09:00', subject: '미적분학', room: '복-102', credits: 3, type: 'general' },
-        { day: '화', time: '10:00', subject: '쇼비즈니스아트', room: '예-307', credits: 3, type: 'major' },
-        { day: '화', time: '12:00', subject: 'JAVA프로그래밍', room: '복-521', credits: 3, type: 'major' },
-        { day: '화', time: '20:00', subject: '스키', room: '체육관', credits: 2, type: 'general' },
-        { day: '수', time: '09:00', subject: '데이터구조', room: '복-508', credits: 3, type: 'major' },
-        { day: '수', time: '12:00', subject: '알고리즘', room: '복-508', credits: 3, type: 'major' },
-        { day: '수', time: '13:00', subject: '이산수학', room: '복-102', credits: 3, type: 'major' },
-        { day: '목', time: '10:00', subject: '논리와비판적사고', room: '은2-305', credits: 2, type: 'general' },
-        { day: '목', time: '12:00', subject: '이산수학', room: '복-102', credits: 3, type: 'major' },
-        { day: '목', time: '13:00', subject: '알고리즘', room: '복-508', credits: 3, type: 'major' },
-        { day: '목', time: '15:00', subject: '딥러닝', room: '복-106', credits: 3, type: 'major' },
-        { day: '금', time: '11:00', subject: '컴퓨터네트워크', room: '복-405', credits: 3, type: 'major' },
-        { day: '금', time: '16:00', subject: '딥러닝', room: '복-106', credits: 3, type: 'major' },
-      ];
-      setTimetable(sampleTimetable);
+      const slots: TimeSlot[] = [];
+      for (const it of res.items) {
+        const day = DAY_MAP[it.dayOfWeek] || it.dayOfWeek;
+        for (let p = it.startPeriod; p <= it.endPeriod; p++) {
+          const time = (p >= 21 ? MAJOR_PERIODS[p] : GENERAL_PERIODS[p]) || '09:00';
+          slots.push({
+            day,
+            time,
+            subject: it.courseName,
+            room: it.room || '',
+            credits: 3,
+            type: isMajor(it.category) ? 'major' : 'general',
+          });
+        }
+      }
+      setTimetable(slots);
+      toast.success(res.title || '시간표가 생성되었습니다!');
+    } catch (e: any) {
+      toast.error(e?.message || '시간표 생성에 실패했습니다.');
+    } finally {
       setIsTimetableGenerating(false);
-      toast.success('시간표가 생성되었습니다!');
-    }, 2000);
+    }
   };
 
   const handleModifyTimetable = () => {
@@ -186,10 +284,16 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage 
     }, 2000);
   };
 
-  const handleResetChat = () => {
-    setMessages([]);
-    setTimetable([]);
-    toast.success('대화가 초기화되었습니다.');
+  const handleResetChat = async () => {
+    try {
+      const uid = myUserId ?? (await getMyProfile()).userId;
+      await deleteChatHistory(uid);
+      setMessages([]);
+      setTimetable([]);
+      toast.success('대화가 초기화되었습니다.');
+    } catch (e: any) {
+      toast.error('대화 초기화에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    }
   };
 
   const handleSaveTimetable = () => {
@@ -278,7 +382,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage 
           onGenerateTimetable={handleGenerateTimetable}
           onModifyTimetable={handleModifyTimetable}
           isGenerating={isTimetableGenerating}
-          hasEnoughMessages={messages.length >= 2}
+          hasEnoughMessages={canGenerate}
         />
       </div>
 

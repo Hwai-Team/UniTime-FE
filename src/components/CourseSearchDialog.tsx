@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import type React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -6,7 +7,7 @@ import { Checkbox } from './ui/checkbox';
 import { Search, X, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
-import { searchCourses, type CourseItem } from '../lib/api';
+import { searchCourses, type CourseItem, getMyProfile, updateCourseTaken, getTakenCourses } from '../lib/api';
 
 interface Course {
   id: string;
@@ -61,6 +62,9 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
   const [items, setItems] = useState<Course[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
+  const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [takenSet, setTakenSet] = useState<Set<number>>(new Set());
+  const stopPropagation = (e: React.MouseEvent) => e.stopPropagation();
 
   useEffect(() => {
     if (!open) return;
@@ -82,6 +86,29 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
     }, 300);
     return () => clearTimeout(timer);
   }, [open, searchQuery, selectedCategory, gradeYear]);
+
+  // 사용자/수강 과목 로딩
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!open) return;
+      try {
+        const me = await getMyProfile();
+        if (!mounted) return;
+        setMyUserId(me.userId);
+        try {
+          const takenIds = await getTakenCourses(me.userId);
+          if (!mounted) return;
+          setTakenSet(new Set(takenIds));
+        } catch {
+          // ignore
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
+  }, [open]);
 
   // 시간 겹침 체크 함수
   const checkTimeConflict = (dayPeriods: string): boolean => {
@@ -140,37 +167,52 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
   }, [filteredCourses]);
 
   const handleToggleCourse = (courseId: string) => {
-    const course = MOCK_COURSES.find(c => c.id === courseId);
+    const course = items.find((c: Course) => c.id === courseId);
     if (!course) return;
 
     // 시간 겹침 체크
     const hasConflict = checkTimeConflict(course.dayPeriods);
-    
-    const newSelected = new Set(selectedCourses);
-    
-    if (newSelected.has(courseId)) {
-      // 이미 선택된 경우 해제
-      newSelected.delete(courseId);
-      setSelectedCourses(newSelected);
-    } else {
-      // 새로 선택하는 경우
-      if (hasConflict) {
-        // 시간 겹침 경고
-        const confirmAdd = window.confirm(
-          `⚠️ 시간표 충돌 경고\n\n"${course.name}" 과목이 기존 시간표와 시간이 겹칩니다.\n\n그래도 추가하시겠습니까?`
-        );
-        
-        if (confirmAdd) {
-          newSelected.add(courseId);
-          setSelectedCourses(newSelected);
-          toast.warning('시간이 겹치는 과목이 추가되었습니다.', {
-            description: '시간표를 확인해주세요.',
-          });
-        }
-      } else {
-        newSelected.add(courseId);
-        setSelectedCourses(newSelected);
-      }
+    if (hasConflict) {
+      const confirmAdd = window.confirm(
+        `⚠️ 시간표 충돌 경고\n\n"${course.name}" 과목이 기존 시간표와 시간이 겹칩니다.\n\n그래도 추가하시겠습니까?`
+      );
+      if (!confirmAdd) return;
+      toast.warning('시간이 겹치는 과목이 추가되었습니다.', { description: '시간표를 확인해주세요.' });
+    }
+
+    // 단일 선택: 즉시 추가하고 닫기
+    onSelect(course);
+    setSelectedCourses(new Set());
+    setSearchQuery('');
+    setSelectedCategory('전체');
+    onClose();
+  };
+
+  // 수강함 토글
+  const handleToggleTaken = async (course: Course) => {
+    if (!myUserId) {
+      toast.error('사용자 정보를 불러오지 못했습니다.');
+      return;
+    }
+    const idNum = Number(course.id);
+    if (!Number.isFinite(idNum)) return;
+    const nextTaken = !takenSet.has(idNum);
+    // 낙관적 업데이트
+    setTakenSet(prev => {
+      const next = new Set(prev);
+      if (nextTaken) next.add(idNum); else next.delete(idNum);
+      return next;
+    });
+    try {
+      await updateCourseTaken(idNum, { userId: myUserId, taken: nextTaken });
+    } catch (e: any) {
+      // 롤백
+      setTakenSet(prev => {
+        const next = new Set(prev);
+        if (nextTaken) next.delete(idNum); else next.add(idNum);
+        return next;
+      });
+      toast.error(e?.message || '수강 여부 변경에 실패했습니다.');
     }
   };
 
@@ -182,7 +224,7 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
 
     let conflictCount = 0;
     selectedCourses.forEach(courseId => {
-      const course = MOCK_COURSES.find(c => c.id === courseId);
+      const course = items.find((c: Course) => c.id === courseId);
       if (course) {
         if (checkTimeConflict(course.dayPeriods)) {
           conflictCount++;
@@ -272,19 +314,32 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
           </div>
 
           {/* Selected Count */}
-          {selectedCourses.size > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-purple-600/20 border border-purple-500/30 rounded-lg">
-              <span className="text-sm text-white">
-                {selectedCourses.size}개 선택됨
-              </span>
-              <button
-                onClick={() => setSelectedCourses(new Set())}
-                className="text-xs text-white/60 hover:text-white underline"
-              >
-                전체 해제
-              </button>
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            {selectedCourses.size > 0 && (
+              <div className="flex items-center justify-between px-3 py-2 bg-purple-600/20 border border-purple-500/30 rounded-lg">
+                <span className="text-sm text-white">{selectedCourses.size}개 선택됨</span>
+                <button
+                  onClick={() => setSelectedCourses(new Set())}
+                  className="text-xs text-white/60 hover:text-white underline"
+                >
+                  전체 해제
+                </button>
+              </div>
+            )}
+            {selectedCourses.size > 0 && (
+              <div className="p-3 bg-black/50 border border-white/10 rounded-lg max-h-32 overflow-auto">
+                {[...selectedCourses].map(id => {
+                  const c = items.find(it => it.id === id);
+                  if (!c) return null;
+                  return (
+                    <div key={id} className="text-xs text-white/80 py-0.5">
+                      • {c.name} ({c.code})
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Results */}
@@ -306,6 +361,7 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
                   </div>
                   {courses.map((course, index) => {
                     const isSelected = selectedCourses.has(course.id);
+                    const isTaken = takenSet.has(Number(course.id));
                     const hasConflict = checkTimeConflict(course.dayPeriods);
                     return (
                       <motion.div
@@ -325,7 +381,7 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
                             checked={isSelected}
                             onCheckedChange={() => handleToggleCourse(course.id)}
                             className="mt-1 border-white/30 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={stopPropagation}
                           />
                           <div className="flex-1">
                             <div className="mb-2">
@@ -335,6 +391,11 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
                                   <span className="text-xs px-2 py-0.5 bg-red-600/30 border border-red-500/50 rounded text-red-300 flex items-center gap-1">
                                     <AlertTriangle className="size-3" />
                                     시간 겹침
+                                  </span>
+                                )}
+                                {isTaken && (
+                                  <span className="text-xs px-2 py-0.5 bg-emerald-600/30 border border-emerald-500/50 rounded text-emerald-300">
+                                    수강함
                                   </span>
                                 )}
                               </div>
@@ -353,6 +414,19 @@ export default function CourseSearchDialog({ open, onClose, onSelect, courseType
                                 {course.year} · {course.category} · {course.credits}학점 · {course.code}
                               </p>
                             </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-2">
+                            <label
+                              className="text-xs text-white/80 flex items-center gap-2 cursor-pointer select-none"
+                              onClick={stopPropagation}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isTaken}
+                                onChange={() => handleToggleTaken(course)}
+                              />
+                              수강함
+                            </label>
                           </div>
                         </div>
                       </motion.div>

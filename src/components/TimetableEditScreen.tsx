@@ -6,7 +6,7 @@ import { ArrowLeft, Save, Plus, Trash2, Image } from 'lucide-react';
 import { toast } from 'sonner';
 import TimetableGrid from './TimetableGrid';
 import CourseSearchDialog from './CourseSearchDialog';
-import { uploadTimetableImage } from '../lib/api';
+import { uploadTimetableImage, updateTimetable } from '../lib/api';
 
 interface TimeSlot {
   day: string;
@@ -18,14 +18,16 @@ interface TimeSlot {
   courseCode?: string;
   period?: string;
   periods?: string[];
+  courseId?: number;
 }
 
 interface TimetableEditScreenProps {
   timetable: {
+    id: number;
     title: string;
     slots: TimeSlot[];
   };
-  onSave: (slots: TimeSlot[]) => void;
+  onSave: () => void;
   onCancel: () => void;
 }
 
@@ -45,15 +47,16 @@ const GENERAL_PERIODS: { [key: string]: { time: string; range: string } } = {
 // 전공 교시 (21-26교시)
 const MAJOR_PERIODS: { [key: string]: { time: string; range: string } } = {
   '21': { time: '09:00', range: '09:00~10:15' },
-  '22': { time: '10:30', range: '10:30~11:45' },
-  '23': { time: '12:00', range: '12:00~13:15' },
-  '24': { time: '13:30', range: '13:30~14:45' },
+  '22': { time: '10:00', range: '10:30~11:45' },
+  '23': { time: '11:00', range: '12:00~13:15' },
+  '24': { time: '13:00', range: '13:30~14:45' },
   '25': { time: '15:00', range: '15:00~16:15' },
-  '26': { time: '16:30', range: '16:30~17:45' },
+  '26': { time: '16:00', range: '16:30~17:45' },
 };
 
 export default function TimetableEditScreen({ timetable, onSave, onCancel }: TimetableEditScreenProps) {
   const [slots, setSlots] = useState<TimeSlot[]>(timetable.slots);
+  const [title, setTitle] = useState<string>(timetable.title);
   const [isSearchDialogOpen, setIsSearchDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [searchCourseType, setSearchCourseType] = useState<'major' | 'general'>('major');
@@ -67,9 +70,33 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
     toast.success('과목이 삭제되었습니다.');
   };
 
-  const handleSave = () => {
-    onSave(slots);
-    toast.success('시간표가 저장되었습니다.');
+  const handleSave = async () => {
+    // slots -> 고유 과목 기준으로 courseId 목록 생성
+    const unique = new Map<string, { courseId: number }>();
+    for (const s of slots) {
+      const numericId = typeof s.courseId === 'number' ? s.courseId : Number(s.courseCode);
+      if (Number.isFinite(numericId)) {
+        const key = `${numericId}-${s.subject}`;
+        if (!unique.has(key)) unique.set(key, { courseId: numericId });
+      }
+    }
+    const items = Array.from(unique.values());
+
+    if (items.length === 0) {
+      toast.error('저장할 과목이 없습니다. 과목을 추가해 주세요.');
+      return;
+    }
+
+    const saving = toast.loading('시간표를 저장하는 중...');
+    try {
+      await updateTimetable(timetable.id, { title, items });
+      toast.success('시간표가 저장되었습니다.');
+      onSave();
+    } catch (e: any) {
+      toast.error(e?.message || '시간표 저장에 실패했습니다.');
+    } finally {
+      toast.dismiss(saving);
+    }
   };
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,6 +151,7 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
                 period: periodKey,
                 subject: course.courseName,
                 courseCode: String(course.courseId),
+                courseId: typeof course.courseId === 'number' ? course.courseId : Number(course.courseId),
                 room: course.room || '',
                 credits: course.credits || 3,
                 type: courseType,
@@ -205,6 +233,7 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
               period: periodNum,
               subject: course.name,
               courseCode: course.code,
+              courseId: Number(course.id),
               room: course.room,
               credits: course.credits,
               type: course.type,
@@ -220,6 +249,7 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
               period: part,
               subject: course.name,
               courseCode: course.code,
+              courseId: Number(course.id),
               room: course.room,
               credits: course.credits,
               type: course.type,
@@ -269,7 +299,11 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
               <ArrowLeft className="size-4" />
               돌아가기
             </Button>
-            <h1 className="text-white text-2xl ml-2">{timetable.title} 수정</h1>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="text-white text-2xl ml-2 bg-transparent border-b border-white/20 focus:outline-none focus:border-white/50"
+            />
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3 text-sm">

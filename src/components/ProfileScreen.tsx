@@ -13,8 +13,15 @@ import type { User } from '../App';
 import Logo from './Logo';
 import { Calendar, Sparkles } from 'lucide-react';
 import { convertApiItemsToTimeSlots, generateTimetableTitle, calculateCredits } from '../lib/timetableUtils';
-import { getMyProfile } from '../lib/api';
-import { getRepresentativeTimetable, getSavedTimetables, deleteAIGeneratedTimetable } from '../lib/api';
+import { 
+  getMyProfile,
+  getRepresentativeTimetable,
+  getSavedTimetables,
+  deleteAIGeneratedTimetable,
+  createTimetable,
+  deleteTimetable as deleteTimetableApi,
+  getMyTimetables
+} from '../lib/api';
 
 interface TimeSlot {
   day: string;
@@ -28,6 +35,7 @@ interface TimeSlot {
 }
 
 interface TimetableData {
+  id?: number;
   year: string;
   semester: string;
   slots: TimeSlot[];
@@ -37,41 +45,10 @@ interface ProfileScreenProps {
   user: User;
   setUser: (user: User | null) => void;
   navigate: (screen: 'welcome' | 'chatbot' | 'login' | 'signup' | 'profile' | 'profileEdit' | 'timetableEdit') => void;
-  onEditTimetable: (timetable: { title: string; slots: TimeSlot[] }) => void;
+  onEditTimetable: (timetable: { id: number; title: string; slots: TimeSlot[] }) => void;
 }
 
-const initialPreviousTimetables: TimetableData[] = [
-  {
-    year: '24',
-    semester: '1',
-    slots: [
-      { day: '월', time: '09:00', period: '21,22', subject: '프로그래밍 기초', courseCode: 'CS101', room: 'IT-101', credits: 3, type: 'major' },
-      { day: '월', time: '13:00', period: '5', subject: '글쓰기와 의사소통', courseCode: 'KOR101', room: '본-205', credits: 2, type: 'general' },
-      { day: '화', time: '10:30', period: '22', subject: '이산수학', courseCode: 'MATH201', room: 'IT-202', credits: 3, type: 'major' },
-      { day: '화', time: '14:00', period: '6', subject: '영어회화', courseCode: 'ENG101', room: '어-304', credits: 2, type: 'general' },
-      { day: '수', time: '09:00', period: '21,22', subject: '프로그래밍 기초', courseCode: 'CS101', room: 'IT-101', credits: 3, type: 'major' },
-      { day: '수', time: '12:00', period: '23', subject: '데이터구조', courseCode: 'CS201', room: 'IT-301', credits: 3, type: 'major' },
-      { day: '목', time: '10:30', period: '22', subject: '이산수학', courseCode: 'MATH201', room: 'IT-202', credits: 3, type: 'major' },
-      { day: '목', time: '13:30', period: '24', subject: '컴퓨터구조', courseCode: 'CS103', room: 'IT-103', credits: 3, type: 'major' },
-      { day: '금', time: '11:00', period: '3', subject: '선형대수', courseCode: 'MATH102', room: '복-208', credits: 3, type: 'general' },
-    ],
-  },
-  {
-    year: '24',
-    semester: '2',
-    slots: [
-      { day: '월', time: '10:30', period: '22', subject: '운영체제', courseCode: 'CS301', room: 'IT-401', credits: 3, type: 'major' },
-      { day: '월', time: '14:00', period: '6', subject: '논리학', courseCode: 'PHI201', room: '본-307', credits: 2, type: 'general' },
-      { day: '화', time: '09:00', period: '21', subject: '알고리즘', courseCode: 'CS302', room: 'IT-302', credits: 3, type: 'major' },
-      { day: '화', time: '12:00', period: '23', subject: '웹프로그래밍', courseCode: 'CS205', room: 'IT-205', credits: 3, type: 'major' },
-      { day: '수', time: '10:30', period: '22', subject: '운영체제', courseCode: 'CS301', room: 'IT-401', credits: 3, type: 'major' },
-      { day: '수', time: '15:00', period: '25', subject: '데이터베이스', courseCode: 'CS303', room: 'IT-303', credits: 3, type: 'major' },
-      { day: '목', time: '09:00', period: '21', subject: '알고리즘', courseCode: 'CS302', room: 'IT-302', credits: 3, type: 'major' },
-      { day: '목', time: '12:00', period: '23', subject: '컴퓨터네트워크', courseCode: 'CS404', room: 'IT-404', credits: 3, type: 'major' },
-      { day: '금', time: '10:00', period: '2', subject: '확��과통계', courseCode: 'STAT201', room: '복-410', credits: 3, type: 'general' },
-    ],
-  },
-];
+const initialPreviousTimetables: TimetableData[] = [];
 
 const initialAITimetable = {
   id: '1',
@@ -101,6 +78,7 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
   const [showAddTimetableDialog, setShowAddTimetableDialog] = useState(false);
   const [previousTimetables, setPreviousTimetables] = useState<TimetableData[]>(initialPreviousTimetables);
   const [aiTimetable, setAiTimetable] = useState<typeof initialAITimetable | null>(initialAITimetable);
+  const [myUserId, setMyUserId] = useState<number | null>(null);
 
   // Fetch my profile from API on mount
   useEffect(() => {
@@ -109,6 +87,7 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
       try {
         const me = await getMyProfile();
         if (!mounted) return;
+        setMyUserId(me.userId);
         const mappedYear = me.grade ? `${me.grade}학년` : '';
         setUser({
           ...user,
@@ -127,6 +106,27 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
     };
   }, []);
 
+  // 내 시간표 목록 불러오기 (서버)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!myUserId) return;
+      try {
+        const timetables = await getMyTimetables(myUserId);
+        if (!mounted) return;
+        const mapped = timetables.map((t) => {
+          const year2 = String(t.year).slice(2);
+          const semesterCode = t.semester === 1 ? '1' : t.semester === 2 ? '2' : t.semester === 3 ? 'summer' : 'winter';
+          const slots = convertApiItemsToTimeSlots(t.items as any);
+          return { id: t.id, year: year2, semester: semesterCode, slots };
+        });
+        setPreviousTimetables(mapped);
+      } catch {
+        // 조용히 실패 처리
+      }
+    })();
+    return () => { mounted = false; };
+  }, [myUserId]);
   const handleUpgradeToPremium = () => {
     setUser({
       ...user,
@@ -134,17 +134,41 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
     });
   };
 
-  const handleAddTimetable = (year: string, semester: string) => {
-    const newTimetable: TimetableData = {
-      year,
-      semester,
-      slots: [],
-    };
-    setPreviousTimetables([...previousTimetables, newTimetable]);
-    toast.success(`20${year}학년도 ${semester}학기 시간표가 추가되었습니다.`);
+  const handleAddTimetable = async (year: string, semester: string) => {
+    if (!myUserId) {
+      toast.error('사용자 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+    const fullYear = 2000 + parseInt(year, 10);
+    const semesterMap: Record<string, number> = { '1': 1, '2': 2, summer: 3, winter: 4 };
+    const semesterNumber = semesterMap[semester];
+    if (!semesterNumber) {
+      toast.error('올바르지 않은 학기입니다.');
+      return;
+    }
+    const semesterLabel = semester === 'summer' ? '여름학기' : semester === 'winter' ? '겨울학기' : `${semester}학기`;
+    const title = `20${year}학년도 ${semesterLabel}`;
+    try {
+      const created = await createTimetable(myUserId, { year: fullYear, semester: semesterNumber, title });
+      const newTimetable: TimetableData = { id: created.id, year, semester, slots: [] };
+      setPreviousTimetables([...previousTimetables, newTimetable]);
+      toast.success(`${title} 시간표가 추가되었습니다.`);
+    } catch (e: any) {
+      toast.error(e?.message || '시간표 생성에 실패했어요.');
+    }
   };
 
-  const handleDeleteTimetable = (index: number) => {
+  const handleDeleteTimetable = async (index: number) => {
+    const target = previousTimetables[index];
+    if (!target) return;
+    if (target.id) {
+      try {
+        await deleteTimetableApi(target.id);
+      } catch (e: any) {
+        toast.error(e?.message || '시간표 삭제에 실패했어요.');
+        return;
+      }
+    }
     const newTimetables = previousTimetables.filter((_, i) => i !== index);
     setPreviousTimetables(newTimetables);
     toast.success('시간표가 삭제되었습니다.');
@@ -194,7 +218,11 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
               variant="ghost" 
               size="sm" 
               className="gap-1 text-white/80 hover:text-white hover:bg-white/10"
-              onClick={() => onEditTimetable({ title, slots })}
+              onClick={() => {
+                const tt = previousTimetables[index];
+                if (!tt?.id) return;
+                onEditTimetable({ id: tt.id, title, slots });
+              }}
             >
               <Edit2 className="size-3" />
               수정
