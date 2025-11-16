@@ -8,7 +8,7 @@ interface TimeSlot {
   credits?: number;
   type?: 'major' | 'general';
   courseCode?: string;
-  period?: string;
+  period?: string; // "1" | "2" | ... | "26"
 }
 
 interface TimetableGridProps {
@@ -17,7 +17,7 @@ interface TimetableGridProps {
 
 interface MergedSlot {
   day: string;
-  startHour: number;
+  startHour: number; // 9.0 ~ 18.0 사이 소수
   endHour: number;
   subject: string;
   room: string;
@@ -25,38 +25,75 @@ interface MergedSlot {
   type?: 'major' | 'general';
 }
 
+// 요일
 const DAYS = ['월', '화', '수', '목', '금'];
+
+// 시간 축 (왼쪽 라벨 9시~17시)
+const START_HOUR = 9;
+const END_HOUR = 18; // 17~18이 마지막 구간
+const HOUR_SPAN = END_HOUR - START_HOUR; // 9칸
+
+// 교시 순서
+const PERIOD_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9, 21, 22, 23, 24, 25, 26];
+
+// 교시별 실제 시간(소수 시간 단위)
+const PERIOD_TIME: Record<
+  number,
+  {
+    start: number; // 예: 9.0
+    end: number;   // 예: 9.833 (9:50)
+  }
+> = {
+  1: { start: 9.0, end: 9.0 + 50 / 60 },   // 09:00 ~ 09:50
+  2: { start: 10.0, end: 10.0 + 50 / 60 }, // 10:00 ~ 10:50
+  3: { start: 11.0, end: 11.0 + 50 / 60 }, // 11:00 ~ 11:50
+  4: { start: 12.0, end: 12.0 + 50 / 60 }, // 12:00 ~ 12:50
+  5: { start: 13.0, end: 13.0 + 50 / 60 }, // 13:00 ~ 13:50
+  6: { start: 14.0, end: 14.0 + 50 / 60 }, // 14:00 ~ 14:50
+  7: { start: 15.0, end: 15.0 + 50 / 60 }, // 15:00 ~ 15:50
+  8: { start: 16.0, end: 16.0 + 50 / 60 }, // 16:00 ~ 16:50
+  9: { start: 17.0, end: 17.0 + 50 / 60 }, // 17:00 ~ 17:50
+
+  // 75분 수업
+  21: { start: 9.0, end: 10.25 },  // 09:00 ~ 10:15
+  22: { start: 10.5, end: 11.75 }, // 10:30 ~ 11:45
+  23: { start: 12.0, end: 13.25 }, // 12:00 ~ 13:15
+  24: { start: 13.5, end: 14.75 }, // 13:30 ~ 14:45
+  25: { start: 15.0, end: 16.25 }, // 15:00 ~ 16:15
+  26: { start: 16.5, end: 17.75 }, // 16:30 ~ 17:45
+};
 
 // 전공 과목 색상 (보라색 계열)
 const MAJOR_COLORS = [
-  '#9D8FE8', // purple
-  '#B89FE8', // lavender
-  '#8B7FD6', // medium purple
-  '#A896E8', // light purple
-  '#7A6FCC', // deep purple
-  '#C5B3FF', // pale purple
+  '#9D8FE8',
+  '#B89FE8',
+  '#8B7FD6',
+  '#A896E8',
+  '#7A6FCC',
+  '#C5B3FF',
 ];
 
 // 교양 과목 색상 (파란색 계열)
 const GENERAL_COLORS = [
-  '#7FCCC0', // teal
-  '#6BC5B8', // cyan
-  '#5AB9AC', // turquoise
-  '#8FD8CC', // light teal
-  '#4DADA0', // deep teal
-  '#A3E8DD', // pale cyan
+  '#7FCCC0',
+  '#6BC5B8',
+  '#5AB9AC',
+  '#8FD8CC',
+  '#4DADA0',
+  '#A3E8DD',
 ];
 
-export default function TimetableGrid({ timetable }: TimetableGridProps) {
-  // Parse time from "09:00" format to hour number
-  const parseTimeToHour = (timeStr: string): number => {
-    const hour = parseInt(timeStr.split(':')[0]);
-    return hour;
-  };
+const LABEL_COL_WIDTH = 70; // 왼쪽 시간 라벨 넓이(px)
+const HEADER_HEIGHT = 40;   // 요일 헤더 높이(px)
 
-  // Get color for subject based on type
+export default function TimetableGrid({ timetable }: TimetableGridProps) {
+  // period → index
+  const periodIndexMap = new Map<number, number>();
+  PERIOD_ORDER.forEach((p, idx) => periodIndexMap.set(p, idx));
+
+  // 과목별 색상
   const subjectColorMap = new Map<string, string>();
-  const getColorForSubject = (subject: string, type?: 'major' | 'general'): string => {
+  const getColorForSubject = (subject: string, type?: 'major' | 'general') => {
     if (!subjectColorMap.has(subject)) {
       const isMajor = type === 'major';
       const colors = isMajor ? MAJOR_COLORS : GENERAL_COLORS;
@@ -66,49 +103,53 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
     return subjectColorMap.get(subject)!;
   };
 
-  // 고정된 시간 범위 사용 (모든 시간표 크기 통일)
-  const minHour = 9;  // 9시부터
-  const maxHour = 19; // 7시(19시)까지
-
-  // 연속된 같은 과목 병합
+  // 같은 요일 + 같은 과목 + 연속 교시 병합
   const mergeConsecutiveSlots = (): MergedSlot[] => {
     const merged: MergedSlot[] = [];
-    
-    DAYS.forEach(day => {
-      // 해당 요일의 모든 슬롯을 시간순으로 정렬
+
+    DAYS.forEach((day) => {
       const daySlots = timetable
-        .filter(slot => slot.day === day)
-        .map(slot => ({
-          ...slot,
-          hour: parseTimeToHour(slot.time),
-        }))
-        .sort((a, b) => a.hour - b.hour);
+        .filter((slot) => slot.day === day && slot.period != null)
+        .map((slot) => {
+          const pNum = Number(slot.period);
+          const idx = periodIndexMap.get(pNum);
+          if (idx === undefined || !PERIOD_TIME[pNum]) return null;
+          return { ...slot, periodNum: pNum, index: idx };
+        })
+        .filter(
+          (v): v is TimeSlot & { periodNum: number; index: number } => v !== null,
+        )
+        .sort((a, b) => a.index - b.index);
 
       let i = 0;
       while (i < daySlots.length) {
-        const currentSlot = daySlots[i];
-        let endHour = currentSlot.hour;
-        
-        // 같은 과목이 연속되는지 확인
+        const curr = daySlots[i];
+        let endIndex = curr.index;
+        let lastPeriodNum = curr.periodNum;
         let j = i + 1;
+
         while (
           j < daySlots.length &&
-          daySlots[j].courseCode === currentSlot.courseCode &&
-          daySlots[j].subject === currentSlot.subject &&
-          daySlots[j].hour === endHour + 1
+          daySlots[j].courseCode === curr.courseCode &&
+          daySlots[j].subject === curr.subject &&
+          daySlots[j].index === endIndex + 1
         ) {
-          endHour = daySlots[j].hour;
+          endIndex = daySlots[j].index;
+          lastPeriodNum = daySlots[j].periodNum;
           j++;
         }
 
+        const firstTime = PERIOD_TIME[curr.periodNum];
+        const lastTime = PERIOD_TIME[lastPeriodNum];
+
         merged.push({
           day,
-          startHour: currentSlot.hour,
-          endHour: endHour + 1, // endHour는 exclusive
-          subject: currentSlot.subject,
-          room: currentSlot.room,
-          courseCode: currentSlot.courseCode || '',
-          type: currentSlot.type,
+          startHour: firstTime.start,
+          endHour: lastTime.end,
+          subject: curr.subject,
+          room: curr.room,
+          courseCode: curr.courseCode || '',
+          type: curr.type,
         });
 
         i = j;
@@ -120,89 +161,115 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
 
   const mergedSlots = mergeConsecutiveSlots();
 
-  // 시간 라벨 생성
-  const timeSlots: number[] = [];
-  for (let hour = minHour; hour < maxHour; hour++) {
-    timeSlots.push(hour);
-  }
+  // 9~17시 라벨
+  const hourRows = Array.from({ length: HOUR_SPAN }, (_, i) => START_HOUR + i);
 
-  const getTimeLabel = (hour: number): string => {
+  const getHourLabel = (hour: number): string => {
     if (hour === 12) return '12';
-    if (hour > 12) return String(hour - 12);
+    if (hour > 12) return String(hour - 12); // 13→1, 14→2 ...
     return String(hour);
   };
 
   return (
     <div className="w-full h-full flex items-center justify-center">
-      <div className="w-full h-full max-h-full grid auto-rows-fr gap-0 border border-white/20 rounded-lg overflow-hidden bg-black/40" style={{ gridTemplateColumns: `50px repeat(5, 1fr)` }}>
-        {/* Header Row - Days */}
-        <div className="bg-black/60 border-b border-r border-white/20 flex items-center justify-center min-h-[40px]"></div>
-        {DAYS.map((day) => (
-          <div
-            key={day}
-            className="bg-black/60 border-b border-r last:border-r-0 border-white/20 text-center text-white/80 flex items-center justify-center text-sm min-h-[40px]"
-          >
-            {day}
-          </div>
-        ))}
-
-        {/* Time Rows */}
-        {timeSlots.map((hour, timeIndex) => (
-          <div key={`time-row-${hour}`} className="contents">
-            {/* Time Label */}
-            <div className="bg-black/40 border-b border-r border-white/20 text-center text-white/60 text-xs flex items-center justify-center min-h-[50px]">
-              {getTimeLabel(hour)}
+      <div className="relative w-full h-full max-h-full border border-white/20 rounded-lg overflow-hidden bg-black/40">
+        {/* 배경 그리드 (시간/요일 라인만) */}
+        <div
+          className="grid w-full h-full"
+          style={{
+            gridTemplateColumns: `${LABEL_COL_WIDTH}px repeat(5, 1fr)`,
+            gridTemplateRows: `${HEADER_HEIGHT}px repeat(${HOUR_SPAN}, minmax(50px, 1fr))`,
+          }}
+        >
+          {/* 헤더: 왼쪽 빈칸 + 요일 */}
+          <div className="bg-black/60 border-b border-r border-white/20" />
+          {DAYS.map((day) => (
+            <div
+              key={day}
+              className="bg-black/60 border-b border-r last:border-r-0 border-white/20 text-center text-white/80 flex items-center justify-center text-sm"
+            >
+              {day}
             </div>
+          ))}
 
-            {/* Day Cells */}
-            {DAYS.map((day, dayIndex) => {
-              // 이 셀이 병합된 슬롯의 시작점인지 확인
-              const mergedSlot = mergedSlots.find(
-                slot => slot.day === day && slot.startHour === hour
-              );
+          {/* 시간 라벨 + 빈 칸(그리드 칸) */}
+          {hourRows.map((hour) => (
+            <div key={`row-${hour}`} className="contents">
+              {/* 왼쪽 시간 라벨 */}
+              <div className="bg-black/40 border-b border-r border-white/20 text-center text-xs flex items-center justify-center">
+                <span className="text-white/70">{getHourLabel(hour)}</span>
+              </div>
 
-              // 이 셀이 병합된 슬롯의 중간/끝 부분인지 확인
-              const isPartOfMergedSlot = mergedSlots.some(
-                slot => slot.day === day && slot.startHour < hour && slot.endHour > hour
-              );
-
-              return (
+              {/* 요일별 셀 (배경선만) */}
+              {DAYS.map((day) => (
                 <div
                   key={`${day}-${hour}`}
-                  className="border-b border-r last:border-r-0 border-white/20 relative group hover:bg-white/5 transition-colors min-h-[50px] overflow-hidden"
-                  style={
-                    mergedSlot
-                      ? {
-                          gridRowEnd: `span ${mergedSlot.endHour - mergedSlot.startHour}`,
-                        }
-                      : isPartOfMergedSlot
-                      ? { display: 'none' }
-                      : {}
-                  }
+                  className="border-b border-r last:border-r-0 border-white/20"
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* 강의 블록 overlay (실제 위치는 period 기준으로 % 계산) */}
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            left: LABEL_COL_WIDTH,
+            right: 0,
+            top: HEADER_HEIGHT,
+            bottom: 0,
+          }}
+        >
+          {mergedSlots.map((slot, idx) => {
+            const dayIndex = DAYS.indexOf(slot.day);
+            if (dayIndex === -1) return null;
+
+            const colWidthPercent = 100 / DAYS.length;
+            const leftPercent = dayIndex * colWidthPercent;
+            const widthPercent = colWidthPercent;
+
+            const topPercent =
+              ((slot.startHour - START_HOUR) / HOUR_SPAN) * 100;
+            const heightPercent =
+              ((slot.endHour - slot.startHour) / HOUR_SPAN) * 100;
+
+            return (
+              <div
+                key={`${slot.day}-${slot.courseCode}-${idx}`}
+                className="absolute px-[2px]"
+                style={{
+                  left: `${leftPercent}%`,
+                  width: `${widthPercent}%`,
+                  top: `${topPercent}%`,
+                  height: `${heightPercent}%`,
+                }}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.3, delay: idx * 0.03 }}
+                  className="pointer-events-auto absolute inset-[1px] p-1.5 flex flex-col justify-center items-center text-center overflow-hidden rounded-sm"
+                  style={{
+                    backgroundColor: getColorForSubject(
+                      slot.subject,
+                      slot.type,
+                    ),
+                  }}
                 >
-                  {mergedSlot && (
-                    <motion.div
-                      initial={{ scale: 0.9, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.3, delay: (timeIndex * 5 + dayIndex) * 0.02 }}
-                      className="absolute inset-[1px] p-1.5 flex flex-col justify-center items-center text-center overflow-hidden rounded-sm"
-                      style={{ backgroundColor: getColorForSubject(mergedSlot.subject, mergedSlot.type) }}
-                    >
-                      <div className="text-white text-[11px] leading-tight px-0.5 line-clamp-2 w-full break-words overflow-hidden">
-                        {mergedSlot.subject}
-                      </div>
-                      {mergedSlot.room && (
-                        <div className="text-white/90 text-[10px] mt-0.5 line-clamp-1 w-full break-words overflow-hidden">
-                          {mergedSlot.room}
-                        </div>
-                      )}
-                    </motion.div>
+                  <div className="text-white text-[11px] leading-tight px-0.5 line-clamp-2 w-full break-words overflow-hidden">
+                    {slot.subject}
+                  </div>
+                  {slot.room && (
+                    <div className="text-white/90 text-[10px] mt-0.5 line-clamp-1 w-full break-words overflow-hidden">
+                      {slot.room}
+                    </div>
                   )}
-                </div>
-              );
-            })}
-          </div>
-        ))}
+                </motion.div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
