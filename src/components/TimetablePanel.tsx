@@ -2,15 +2,7 @@ import { Calendar, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import TimetableGrid from './TimetableGrid';
-
-interface TimeSlot {
-  day: string;
-  time: string;
-  subject: string;
-  room: string;
-  credits: number;
-  type: 'major' | 'general';
-}
+import type { TimeSlot } from '../lib/timetableUtils';
 
 interface TimetablePanelProps {
   timetable: TimeSlot[];

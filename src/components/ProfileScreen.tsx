@@ -20,7 +20,9 @@ import {
   deleteAIGeneratedTimetable,
   createTimetable,
   deleteTimetable as deleteTimetableApi,
-  getMyTimetables
+  getMyTimetables,
+  getAITimetable,
+  deleteAITimetable
 } from '../lib/api';
 
 interface TimeSlot {
@@ -50,34 +52,15 @@ interface ProfileScreenProps {
 
 const initialPreviousTimetables: TimetableData[] = [];
 
-const initialAITimetable = {
-  id: '1',
-  createdAt: '2025-11-01 14:30',
-  slots: [
-    { day: '월', time: '09:00', period: '21', subject: '자료구조', courseCode: 'CS201', room: 'IT-301', credits: 3, type: 'major' },
-    { day: '월', time: '10:00', period: '22', subject: '자료구조', courseCode: 'CS201', room: 'IT-301', credits: 3, type: 'major' },
-    { day: '월', time: '12:00', period: '23', subject: '운영체제', courseCode: 'CS301', room: 'IT-205', credits: 3, type: 'major' },
-    { day: '화', time: '10:00', period: '22', subject: '알고리즘', courseCode: 'CS302', room: 'IT-402', credits: 3, type: 'major' },
-    { day: '화', time: '13:00', period: '5', subject: '영어회화', courseCode: 'ENG101', room: '어-201', credits: 2, type: 'general' },
-    { day: '수', time: '09:00', period: '21', subject: '데이터베이스', courseCode: 'CS303', room: 'IT-301', credits: 3, type: 'major' },
-    { day: '수', time: '10:00', period: '22', subject: '데이터베이스', courseCode: 'CS303', room: 'IT-301', credits: 3, type: 'major' },
-    { day: '수', time: '13:00', period: '24', subject: '소프트웨어공학', courseCode: 'CS401', room: 'IT-103', credits: 3, type: 'major' },
-    { day: '목', time: '12:00', period: '23', subject: '인공지능', courseCode: 'CS501', room: 'IT-501', credits: 3, type: 'major' },
-    { day: '목', time: '13:00', period: '24', subject: '인공지능', courseCode: 'CS501', room: 'IT-501', credits: 3, type: 'major' },
-    { day: '목', time: '15:00', period: '25', subject: '컴퓨터그래픽스', courseCode: 'CS404', room: 'IT-404', credits: 3, type: 'major' },
-    { day: '금', time: '10:00', period: '22', subject: '웹프로그래밍', courseCode: 'CS204', room: 'IT-204', credits: 3, type: 'major' },
-    { day: '금', time: '11:00', period: '23', subject: '웹프로그래밍', courseCode: 'CS204', room: 'IT-204', credits: 3, type: 'major' },
-    { day: '금', time: '12:00', period: '4', subject: '경영학개론', courseCode: 'BUS101', room: '경-103', credits: 2, type: 'general' },
-  ] as TimeSlot[],
-};
-
 export default function ProfileScreen({ user, setUser, navigate, onEditTimetable }: ProfileScreenProps) {
   const [activeTab, setActiveTab] = useState('previous');
   const [selectedTimetable, setSelectedTimetable] = useState<{ slots: TimeSlot[], title: string } | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [showAddTimetableDialog, setShowAddTimetableDialog] = useState(false);
+  // 이전 학기 시간표: /api/timetables/me 에서 관리하는 일반 시간표들만 저장
   const [previousTimetables, setPreviousTimetables] = useState<TimetableData[]>(initialPreviousTimetables);
-  const [aiTimetable, setAiTimetable] = useState<typeof initialAITimetable | null>(initialAITimetable);
+  // AI 생성 시간표: /api/timetables/ai 에서 관리하는 AI 시간표만 저장
+  const [aiTimetable, setAiTimetable] = useState<{ id: string; createdAt: string; slots: TimeSlot[]; title: string; resultSummary?: string } | null>(null);
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
   // Fetch my profile from API on mount
@@ -106,12 +89,14 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
     };
   }, []);
 
-  // 내 시간표 목록 불러오기 (서버)
+  // 이전 학기 시간표 목록 불러오기: /api/timetables/me 에서만 가져옴 (일반 시간표만)
+  // AI 시간표는 제외하고, 이전 학기 시간표들만 관리
   useEffect(() => {
     let mounted = true;
     (async () => {
       if (!myUserId) return;
       try {
+        // /api/timetables/me API 호출 - 일반 시간표 목록만 반환
         const timetables = await getMyTimetables(myUserId);
         if (!mounted) return;
         const mapped = timetables.map((t) => {
@@ -123,6 +108,34 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
         setPreviousTimetables(mapped);
       } catch {
         // 조용히 실패 처리
+      }
+    })();
+    return () => { mounted = false; };
+  }, [myUserId]);
+
+  // AI 생성 시간표 불러오기: /api/timetables/ai 에서만 가져옴
+  // 이전 학기 시간표와 완전히 분리되어 관리됨
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!myUserId) return;
+      try {
+        // /api/timetables/ai API 호출 - AI 시간표만 반환
+        const aiTimetableRes = await getAITimetable(myUserId);
+        if (!mounted) return;
+        const slots = convertApiItemsToTimeSlots(aiTimetableRes.items as any);
+        const title = aiTimetableRes.title || 'AI 생성 시간표';
+        const createdAt = new Date(aiTimetableRes.createdAt).toLocaleString('ko-KR');
+        setAiTimetable({
+          id: String(aiTimetableRes.id),
+          createdAt,
+          slots,
+          title,
+          resultSummary: aiTimetableRes.resultSummary,
+        });
+      } catch {
+        // AI 시간표가 없거나 로딩 실패 시 null로 유지
+        setAiTimetable(null);
       }
     })();
     return () => { mounted = false; };
@@ -174,9 +187,19 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
     toast.success('시간표가 삭제되었습니다.');
   };
 
-  const handleDeleteAITimetable = () => {
-    setAiTimetable(null);
-    toast.success('AI 시간표가 삭제되었습니다.');
+  const handleDeleteAITimetable = async () => {
+    if (!myUserId) {
+      toast.error('사용자 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
+    }
+
+    try {
+      await deleteAITimetable(myUserId);
+      setAiTimetable(null);
+      toast.success('AI 시간표가 삭제되었습니다.');
+    } catch (e: any) {
+      toast.error(e?.message || 'AI 시간표 삭제에 실패했습니다.');
+    }
   };
 
   const handleAddAITimetable = () => {

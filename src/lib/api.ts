@@ -51,13 +51,39 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
 		}
 	}
 
+	// 204 No Content는 성공 응답이지만 body가 없으므로 먼저 처리
+	if (res.status === 204) {
+		return undefined as T;
+	}
+	
 	if (!res.ok) {
 		const text = await res.text().catch(() => '');
 		const error = new Error(text || `HTTP ${res.status}`) as Error & { status?: number };
 		error.status = res.status;
 		throw error;
 	}
-	return res.json() as Promise<T>;
+	
+	// Content-Length가 0이거나 body가 없는 경우도 처리
+	const contentLength = res.headers.get('content-length');
+	if (contentLength === '0') {
+		return undefined as T;
+	}
+	
+	// body가 있는 경우에만 JSON 파싱 시도
+	try {
+		const text = await res.text();
+		// 빈 body인 경우
+		if (!text || text.trim() === '') {
+			return undefined as T;
+		}
+		// JSON 파싱 시도
+		return JSON.parse(text) as T;
+	} catch (parseError) {
+		// JSON 파싱 실패 시 (예: HTML 에러 페이지 등)
+		// 빈 응답으로 처리하거나 원본 텍스트를 포함한 에러를 던질 수도 있음
+		console.warn('Failed to parse JSON response:', parseError);
+		return undefined as T;
+	}
 }
 
 // ==================== Auth APIs ====================
@@ -379,6 +405,64 @@ export async function generateAITimetable(body: AIGenerateTimetableRequest) {
 	return request<AIGenerateTimetableResponse>('/timetables/ai', {
 		method: 'POST',
 		body: JSON.stringify(body),
+	});
+}
+
+export interface SaveAITimetableRequest {
+	userId: number;
+	timetableId: number;
+	resultSummary: string;
+}
+export interface AITimetableResponse {
+	id: number;
+	userId: number;
+	timetableId: number;
+	prompt: string;
+	title: string;
+	userName: string;
+	message: string;
+	resultSummary: string;
+	createdAt: string;
+	items: Array<{
+		id: number;
+		courseId: number;
+		credit: number;
+		professor: string;
+		courseName: string;
+		dayOfWeek: string;
+		startPeriod: number;
+		endPeriod: number;
+		room: string;
+		category: string;
+		recommendedGrade: number;
+	}>;
+}
+export async function saveAITimetable(body: SaveAITimetableRequest) {
+	return request<AITimetableResponse>('/timetables/ai', {
+		method: 'PUT',
+		body: JSON.stringify(body),
+	});
+}
+
+export async function getAITimetable(userId: number) {
+	return request<AITimetableResponse>(`/timetables/ai?userId=${userId}`, {
+		method: 'GET',
+	});
+}
+
+export async function deleteAITimetable(userId: number) {
+	return request<void>(`/timetables/ai?userId=${userId}`, {
+		method: 'DELETE',
+	});
+}
+
+export interface TimetableSummaryResponse {
+	userId: number;
+	summary: string;
+}
+export async function getTimetableSummary(userId: number) {
+	return request<TimetableSummaryResponse>(`/ai/summary/timetable?userId=${userId}`, {
+		method: 'GET',
 	});
 }
 
