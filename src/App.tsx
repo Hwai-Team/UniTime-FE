@@ -41,11 +41,21 @@ export default function App() {
 
   const navigate = (screen: Screen) => {
     setCurrentScreen(screen);
+    // chatbot 화면 외로 이동하거나, chatbot으로 이동할 때 initialMessage가 없으면 초기화
+    // 이렇게 하면 채팅 초기화 후 다시 들어와도 이전 initialMessage가 반복되지 않음
+    if (screen !== 'chatbot' || !initialMessage) {
+      setInitialMessage('');
+    }
   };
 
   const handleStartChat = (message: string) => {
     setInitialMessage(message);
     setCurrentScreen('chatbot');
+  };
+
+  const handleInitialMessageProcessed = () => {
+    // initialMessage가 처리되었으면 초기화하여 재사용 방지
+    setInitialMessage('');
   };
 
   const handleEditTimetable = (timetable: { id: number; title: string; slots: TimeSlot[] }) => {
@@ -79,7 +89,13 @@ export default function App() {
         <WelcomeScreen onStartChat={handleStartChat} navigate={navigate} user={user} />
       )}
       {currentScreen === 'chatbot' && (
-        <ChatbotScreen user={user} setUser={setUser} navigate={navigate} initialMessage={initialMessage} />
+        <ChatbotScreen 
+          user={user} 
+          setUser={setUser} 
+          navigate={navigate} 
+          initialMessage={initialMessage}
+          onInitialMessageProcessed={handleInitialMessageProcessed}
+        />
       )}
       {currentScreen === 'login' && (
         <LoginScreen setUser={setUser} navigate={navigate} />
