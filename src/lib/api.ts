@@ -1,5 +1,5 @@
-// API layer: 개발에서는 Vite 프록시(/api), 배포에서는 절대 URL 사용
-const API_BASE = import.meta.env.PROD ? 'https://unitime-be.onrender.com' : '/api';
+// API layer: 개발과 배포 모두 프록시(/api) 사용 - Netlify 프록시를 통해 CORS 문제 해결
+const API_BASE = '/api';
 
 // ========== Simple auth token store (access + refresh) ==========
 type TokenPair = { accessToken?: string; refreshToken?: string };
@@ -30,7 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
 
 	const res = await fetch(`${API_BASE}${path}`, {
 		headers,
-		credentials: 'include',
+		// credentials는 같은 도메인에서만 필요하므로 프록시 사용 시 제거
 		...options,
 	});
 
@@ -269,9 +269,26 @@ export async function deleteTimetable(timetableId: number) {
 	return request<void>(`/timetables/${timetableId}`, { method: 'DELETE' });
 }
 
+export async function getTimetable(timetableId: number) {
+	return request<TimetableResponse>(`/timetables/${timetableId}`, { method: 'GET' });
+}
+
 export async function getMyTimetables(userId: number) {
 	const qs = new URLSearchParams({ userId: String(userId) });
 	return request<TimetableResponse[]>(`/timetables/me?${qs.toString()}`, { method: 'GET' });
+}
+
+export interface TimetableImageItem {
+	courseName: string;
+	courseCode: string | null;
+	dayOfWeek: string;
+	startPeriod: number;
+	endPeriod: number;
+	room: string | null;
+}
+
+export interface TimetableImageResponse {
+	items: TimetableImageItem[];
 }
 
 export interface UploadResponse {
@@ -291,48 +308,65 @@ export interface UploadResponse {
 	error?: string;
 }
 
-export async function uploadTimetableImage(_file: File): Promise<UploadResponse> {
-	// NOTE: 이미지 인식 백엔드가 없으므로 데모용 더미 데이터를 반환합니다.
-	// 실제 구현 시, 서버 업로드 및 분석 API 호출로 교체하세요.
-	await new Promise((r) => setTimeout(r, 600));
+export async function uploadTimetableImage(file: File): Promise<UploadResponse> {
+	const formData = new FormData();
+	formData.append('file', file);
 
-	return {
-		success: true,
-		data: {
-			courses: [
-				{
-					category: '전필',
-					dayOfWeek: 'MON',
-					startPeriod: 21,
-					endPeriod: 22,
-					courseName: '자료구조',
-					courseId: 'CS201',
-					room: 'IT-301',
-					credits: 3,
-				},
-				{
-					category: '전선',
-					dayOfWeek: 'WED',
-					startPeriod: 23,
-					endPeriod: 23,
-					courseName: '데이터베이스',
-					courseId: 'CS303',
-					room: 'IT-205',
-					credits: 3,
-				},
-				{
-					category: '교양',
-					dayOfWeek: 'FRI',
-					startPeriod: 3,
-					endPeriod: 3,
-					courseName: '영어회화',
-					courseId: 'ENG101',
-					room: '본-201',
-					credits: 2,
-				},
-			],
-		},
-	};
+	const headers: Record<string, string> = {};
+	if (tokens.accessToken) {
+		headers.Authorization = `Bearer ${tokens.accessToken}`;
+	}
+
+	try {
+		const res = await fetch(`${API_BASE}/timetables/import/image`, {
+			method: 'POST',
+			headers,
+			body: formData,
+		});
+
+		if (!res.ok) {
+			const text = await res.text().catch(() => '');
+			throw new Error(text || `HTTP ${res.status}`);
+		}
+
+		const data: TimetableImageResponse = await res.json();
+
+		// API 응답 형식을 기존 형식으로 변환
+		const courses = data.items.map((item) => {
+			// 교시 범위로 category 추정
+			// 21-26: 전공, 1-9: 교양, 그 외: 교시 범위에 따라 판단
+			let category = '교양';
+			if (item.startPeriod >= 21 && item.startPeriod <= 26) {
+				category = '전필';
+			} else if (item.courseCode) {
+				// courseCode가 있으면 코드로 판단
+				if (item.courseCode.startsWith('CS') || item.courseCode.startsWith('CE')) {
+					category = '전필';
+				}
+			}
+			
+			return {
+				category,
+				dayOfWeek: item.dayOfWeek as 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI',
+				startPeriod: item.startPeriod,
+				endPeriod: item.endPeriod,
+				courseName: item.courseName,
+				courseId: item.courseCode || item.courseName, // courseCode가 null이면 courseName 사용
+				room: item.room || '',
+				credits: 3, // 기본값, 실제로는 백엔드에서 제공해야 함
+			};
+		});
+
+		return {
+			success: true,
+			data: { courses },
+		};
+	} catch (error: any) {
+		return {
+			success: false,
+			error: error?.message || '이미지 업로드에 실패했습니다.',
+		};
+	}
 }
 
 // ==================== Chat ====================

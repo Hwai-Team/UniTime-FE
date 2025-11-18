@@ -234,6 +234,50 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
             const heightPercent =
               ((slot.endHour - slot.startHour) / HOUR_SPAN) * 100;
 
+            // 블록 높이와 과목명 길이에 따라 글씨 크기 조정 (블록이 작을수록 글씨를 더 작게)
+            const blockHeightHours = slot.endHour - slot.startHour;
+            const subjectLength = slot.subject.length;
+            let subjectFontSize = 'text-[11px]';
+            let roomFontSize = 'text-[10px]';
+            let padding = 'p-1.5';
+            let lineClamp = 'line-clamp-2';
+            
+            // 블록 높이와 과목명 길이를 모두 고려
+            if (blockHeightHours >= 1.8) { // 2교시 이상
+              subjectFontSize = 'text-[11px]';
+              roomFontSize = 'text-[10px]';
+              padding = 'p-1.5';
+              lineClamp = 'line-clamp-2';
+            } else if (blockHeightHours >= 1.3) { // 약 1.5-2교시
+              subjectFontSize = subjectLength > 8 ? 'text-[9px]' : 'text-[10px]';
+              roomFontSize = 'text-[9px]';
+              padding = 'p-1.5';
+              lineClamp = 'line-clamp-2';
+            } else if (blockHeightHours >= 0.85) { // 약 1-1.5교시
+              subjectFontSize = subjectLength > 6 ? 'text-[8px]' : 'text-[9px]';
+              roomFontSize = 'text-[8px]';
+              padding = 'p-1';
+              lineClamp = 'line-clamp-2';
+            } else { // 1교시 미만 (50분 미만) - 가장 작은 블록
+              // 과목명이 길면 더 작은 글씨 사용
+              if (subjectLength > 8) {
+                subjectFontSize = 'text-[7px]';
+                roomFontSize = 'text-[6px]';
+                padding = 'p-0.5';
+                lineClamp = 'line-clamp-3'; // 3줄까지 허용
+              } else if (subjectLength > 5) {
+                subjectFontSize = 'text-[8px]';
+                roomFontSize = 'text-[7px]';
+                padding = 'p-0.5';
+                lineClamp = 'line-clamp-2';
+              } else {
+                subjectFontSize = 'text-[9px]';
+                roomFontSize = 'text-[8px]';
+                padding = 'p-0.5';
+                lineClamp = 'line-clamp-2';
+              }
+            }
+
             return (
               <div
                 key={`${slot.day}-${slot.courseCode}-${idx}`}
@@ -249,7 +293,7 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.3, delay: idx * 0.03 }}
-                  className="pointer-events-auto absolute inset-[1px] p-1.5 flex flex-col justify-center items-center text-center overflow-hidden rounded-sm"
+                  className={`pointer-events-auto absolute inset-[1px] ${padding} flex flex-col justify-center items-center text-center overflow-hidden rounded-sm`}
                   style={{
                     backgroundColor: getColorForSubject(
                       slot.subject,
@@ -257,11 +301,11 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
                     ),
                   }}
                 >
-                  <div className="text-white text-[11px] leading-tight px-0.5 line-clamp-2 w-full break-words overflow-hidden">
+                  <div className={`text-white ${subjectFontSize} leading-tight px-0.5 ${lineClamp} w-full break-words overflow-hidden`}>
                     {slot.subject}
                   </div>
                   {slot.room && (
-                    <div className="text-white/90 text-[10px] mt-0.5 line-clamp-1 w-full break-words overflow-hidden">
+                    <div className={`text-white/90 ${roomFontSize} mt-0.5 line-clamp-1 w-full break-words overflow-hidden`}>
                       {slot.room}
                     </div>
                   )}

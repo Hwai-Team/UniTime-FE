@@ -6,7 +6,7 @@ import { ArrowLeft, Save, Plus, Trash2, Image } from 'lucide-react';
 import { toast } from 'sonner';
 import TimetableGrid from './TimetableGrid';
 import CourseSearchDialog from './CourseSearchDialog';
-import { uploadTimetableImage, updateTimetable } from '../lib/api';
+import { uploadTimetableImage, updateTimetable, searchCourses, getTimetable } from '../lib/api';
 
 interface TimeSlot {
   day: string;
@@ -71,29 +71,99 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
   };
 
   const handleSave = async () => {
-    // slots -> 고유 과목 기준으로 courseId 목록 생성
-    const unique = new Map<string, { courseId: number }>();
-    for (const s of slots) {
-      const numericId = typeof s.courseId === 'number' ? s.courseId : Number(s.courseCode);
-      if (Number.isFinite(numericId)) {
-        const key = `${numericId}-${s.subject}`;
-        if (!unique.has(key)) unique.set(key, { courseId: numericId });
-      }
-    }
-    const items = Array.from(unique.values());
-
-    if (items.length === 0) {
-      toast.error('저장할 과목이 없습니다. 과목을 추가해 주세요.');
-      return;
-    }
-
     const saving = toast.loading('시간표를 저장하는 중...');
+    
     try {
-      await updateTimetable(timetable.id, { title, items });
-      toast.success('시간표가 저장되었습니다.');
+      // 1. 기존 시간표 데이터 가져오기
+      const existingTimetable = await getTimetable(timetable.id);
+      
+      // 2. 기존 items를 courseId Set으로 변환
+      const existingCourseIds = new Set(
+        existingTimetable.items.map(item => item.courseId)
+      );
+      
+      // 3. 새로운 slots -> 고유 과목 기준으로 courseId 목록 생성
+      const newUnique = new Map<string, { courseId: number }>();
+      const invalidSlots: string[] = [];
+      
+      for (const s of slots) {
+        // courseId가 있으면 우선 사용, 없으면 courseCode를 숫자로 변환 시도
+        let numericId: number | null = null;
+        
+        if (s.courseId && typeof s.courseId === 'number' && Number.isFinite(s.courseId)) {
+          numericId = s.courseId;
+        } else if (s.courseCode) {
+          const parsed = Number(s.courseCode);
+          if (Number.isFinite(parsed) && parsed > 0) {
+            numericId = parsed;
+          }
+        }
+        
+        if (numericId && numericId > 0) {
+          const key = `${numericId}-${s.subject}`;
+          if (!newUnique.has(key)) {
+            newUnique.set(key, { courseId: numericId });
+          }
+        } else {
+          invalidSlots.push(s.subject || '알 수 없는 과목');
+        }
+      }
+      
+      const newCourseIds = new Set(Array.from(newUnique.values()).map(item => item.courseId));
+      
+      // 4. 추가/삭제된 항목 계산
+      const addedCourseIds = Array.from(newCourseIds).filter(id => !existingCourseIds.has(id));
+      const removedCourseIds = Array.from(existingCourseIds).filter(id => !newCourseIds.has(id));
+      
+      // 5. 최종 items 생성 (기존 항목 + 추가된 항목 - 삭제된 항목)
+      const finalItems: Array<{ courseId: number }> = [];
+      
+      // 기존 항목 중 삭제되지 않은 것들 유지
+      existingTimetable.items.forEach(item => {
+        if (!removedCourseIds.includes(item.courseId)) {
+          finalItems.push({ courseId: item.courseId });
+        }
+      });
+      
+      // 새로 추가된 항목들 추가
+      addedCourseIds.forEach(courseId => {
+        finalItems.push({ courseId });
+      });
+      
+      if (finalItems.length === 0 && invalidSlots.length === 0) {
+        toast.error('저장할 과목이 없습니다. 과목을 추가해 주세요.', { id: saving });
+        return;
+      }
+
+      if (invalidSlots.length > 0) {
+        toast.warning(`${invalidSlots.length}개의 과목은 저장되지 않았습니다.`, { id: saving });
+      }
+
+      // 6. 변경사항이 있는지 확인
+      const hasChanges = addedCourseIds.length > 0 || removedCourseIds.length > 0 || title !== existingTimetable.title;
+      
+      if (!hasChanges) {
+        toast.info('변경사항이 없습니다.', { id: saving });
+        return;
+      }
+
+      // 7. 업데이트 요청
+      await updateTimetable(timetable.id, { 
+        title: title !== existingTimetable.title ? title : undefined,
+        items: finalItems 
+      });
+      
+      const changeMessages = [];
+      if (addedCourseIds.length > 0) changeMessages.push(`${addedCourseIds.length}개 추가`);
+      if (removedCourseIds.length > 0) changeMessages.push(`${removedCourseIds.length}개 삭제`);
+      
+      toast.success(
+        `시간표가 저장되었습니다.${changeMessages.length > 0 ? ` (${changeMessages.join(', ')})` : ''}`,
+        { id: saving }
+      );
       onSave();
     } catch (e: any) {
-      toast.error(e?.message || '시간표 저장에 실패했습니다.');
+      toast.error(e?.message || '시간표 저장에 실패했습니다.', { id: saving });
     } finally {
       toast.dismiss(saving);
     }
@@ -129,9 +199,44 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
           return;
         }
 
+        // courseCode 또는 courseName으로 실제 courseId 찾기
+        toast.loading('과목 정보를 확인하는 중...', { id: loadingToast });
+        const courseCodeMap = new Map<string, number>();
+        
+        // 고유한 courseCode/courseName 목록 추출
+        const uniqueIdentifiers = [...new Set(courses.map((c: any) => c.courseId))];
+        
+        // 각 identifier로 실제 courseId 검색
+        for (const identifier of uniqueIdentifiers) {
+          if (!identifier) continue;
+          
+          try {
+            const searchResults = await searchCourses({ keyword: String(identifier) });
+            // courseCode가 정확히 일치하거나 과목명이 일치하는 첫 번째 결과 사용
+            const matched = searchResults.find((item: any) => 
+              item.courseCode === identifier || 
+              item.courseCode?.startsWith(String(identifier)) ||
+              item.name === identifier ||
+              item.name?.includes(String(identifier))
+            );
+            if (matched) {
+              courseCodeMap.set(String(identifier), matched.id);
+            }
+          } catch (err) {
+            console.warn(`Failed to find courseId for ${identifier}:`, err);
+          }
+        }
+
         const newSlots: TimeSlot[] = [];
         courses.forEach((course: any) => {
-          const courseType = course.category === '전필' || course.category === '전선' ? 'major' : 'general';
+          // 교시 범위로 타입 판단 (21-26: 전공, 1-9: 교양, 그 외: 교시 범위에 따라)
+          let courseType: 'major' | 'general' = 'general';
+          if (course.startPeriod >= 21 && course.startPeriod <= 26) {
+            courseType = 'major';
+          } else if (course.category === '전필' || course.category === '전선') {
+            courseType = 'major';
+          }
+          
           const periods = courseType === 'major' ? MAJOR_PERIODS : GENERAL_PERIODS;
 
           const dayMap: { [key: string]: string } = {
@@ -139,10 +244,34 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
           };
           
           const day = dayMap[course.dayOfWeek] || course.dayOfWeek;
+          const identifier = String(course.courseId || course.courseName);
+          const actualCourseId = courseCodeMap.get(identifier) || (course.courseId && !isNaN(Number(course.courseId)) ? Number(course.courseId) : undefined);
           
+          // 교시 범위 처리 (1-9 또는 21-26 범위가 아닌 경우도 처리)
           for (let p = course.startPeriod; p <= course.endPeriod; p++) {
             const periodKey = String(p);
-            const periodInfo = periods[periodKey];
+            let periodInfo = periods[periodKey];
+            
+            // 교시 정보가 없으면 동적으로 생성 (1-9 또는 21-26 범위가 아닌 경우)
+            if (!periodInfo) {
+              // 일반 교시로 처리 (50분 단위, 1교시 = 09:00)
+              if (p >= 1 && p <= 20) {
+                // 1-20교시: 일반 교시 형식 (50분)
+                const hour = 8 + p; // 1교시 = 9시, 2교시 = 10시...
+                const startHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                const endHour = hour + 1;
+                const endTime = endHour < 10 ? `0${endHour}:50` : `${endHour}:50`;
+                periodInfo = { time: startHour, range: `${startHour}~${endTime}` };
+              } else if (p > 20) {
+                // 21 이상: 전공 교시 형식 (75분) - 동적 생성
+                const adjustedPeriod = p - 20; // 21 -> 1, 22 -> 2, ...
+                const hour = 8 + adjustedPeriod;
+                const startHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                const endHour = hour + 1;
+                const endTime = endHour < 10 ? `0${endHour}:15` : `${endHour}:15`;
+                periodInfo = { time: startHour, range: `${startHour}~${endTime}` };
+              }
+            }
             
             if (periodInfo) {
               newSlots.push({
@@ -150,8 +279,8 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
                 time: periodInfo.time,
                 period: periodKey,
                 subject: course.courseName,
-                courseCode: String(course.courseId),
-                courseId: typeof course.courseId === 'number' ? course.courseId : Number(course.courseId),
+                courseCode: identifier,
+                courseId: actualCourseId,
                 room: course.room || '',
                 credits: course.credits || 3,
                 type: courseType,
@@ -162,16 +291,16 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
 
         if (newSlots.length > 0) {
           setSlots([...slots, ...newSlots]);
-          toast.success(`${courses.length}개의 과목이 추가되었습니다.`);
+          toast.success(`${courses.length}개의 과목이 추가되었습니다.`, { id: loadingToast });
         } else {
-          toast.error('시간표 데이터를 변환할 수 없습니다.');
+          toast.error('시간표 데이터를 변환할 수 없습니다.', { id: loadingToast });
         }
       } else {
         throw new Error(response.error || '이미지 업로드에 실패했습니다.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Image upload error:', error);
-      toast.error('이미지 분석 중 오류가 발생했습니다. 다시 시도해주세요.');
+      toast.error(error?.message || '이미지 분석 중 오류가 발생했습니다. 다시 시도해주세요.', { id: loadingToast });
     } finally {
       setIsUploading(false);
       toast.dismiss(loadingToast);

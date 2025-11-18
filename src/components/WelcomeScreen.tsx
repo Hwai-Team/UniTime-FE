@@ -75,7 +75,7 @@ export default function WelcomeScreen({ onStartChat, navigate, user }: WelcomeSc
 
       {/* Header */}
       <header className="relative z-10 p-6 flex items-center justify-between">
-        <div></div>
+        <Logo size="md" className="cursor-pointer" />
         <div className="flex items-center gap-3">
           {user && (
             <Button
