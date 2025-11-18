@@ -132,6 +132,23 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+.chat-typography {
+  font-family: 'Pretendard Variable', 'Noto Sans KR', 'Segoe UI', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.chat-input-field {
+  font-family: 'Pretendard Variable', 'Noto Sans KR', 'Segoe UI', sans-serif;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+.chat-highlight-text {
+  font-family: 'Pretendard Variable', 'Noto Sans KR', 'Segoe UI', sans-serif;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+}
 }
 
 /**

@@ -40,6 +40,19 @@ interface TimetableData {
   id?: number;
   year: string;
   semester: string;
+  title: string;
+  slots: TimeSlot[];
+}
+
+const PLAN_KEYS = ['A', 'B', 'C'] as const;
+type PlanKey = (typeof PLAN_KEYS)[number];
+
+interface AITimetablePlan {
+  planKey: PlanKey;
+  id: string;
+  createdAt: string;
+  title: string;
+  resultSummary?: string;
   slots: TimeSlot[];
 }
 
@@ -59,8 +72,12 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
   const [showAddTimetableDialog, setShowAddTimetableDialog] = useState(false);
   // 이전 학기 시간표: /api/timetables/me 에서 관리하는 일반 시간표들만 저장
   const [previousTimetables, setPreviousTimetables] = useState<TimetableData[]>(initialPreviousTimetables);
-  // AI 생성 시간표: /api/timetables/ai 에서 관리하는 AI 시간표만 저장
-  const [aiTimetable, setAiTimetable] = useState<{ id: string; createdAt: string; slots: TimeSlot[]; title: string; resultSummary?: string } | null>(null);
+  const [aiTimetables, setAiTimetables] = useState<Record<PlanKey, AITimetablePlan | null>>({
+    A: null,
+    B: null,
+    C: null,
+  });
+  const [activePlan, setActivePlan] = useState<PlanKey>('A');
   const [myUserId, setMyUserId] = useState<number | null>(null);
 
   // Fetch my profile from API on mount
@@ -103,7 +120,8 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
           const year2 = String(t.year).slice(2);
           const semesterCode = t.semester === 1 ? '1' : t.semester === 2 ? '2' : t.semester === 3 ? 'summer' : 'winter';
           const slots = convertApiItemsToTimeSlots(t.items as any);
-          return { id: t.id, year: year2, semester: semesterCode, slots };
+          const fallbackTitle = generateTimetableTitle(t.year, t.semester);
+          return { id: t.id, year: year2, semester: semesterCode, title: t.title || fallbackTitle, slots };
         });
         setPreviousTimetables(mapped);
       } catch {
@@ -113,29 +131,45 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
     return () => { mounted = false; };
   }, [myUserId]);
 
-  // AI 생성 시간표 불러오기: /api/timetables/ai 에서만 가져옴
-  // 이전 학기 시간표와 완전히 분리되어 관리됨
+  // AI 생성 시간표 (최대 3개 플랜)
   useEffect(() => {
     let mounted = true;
+    const toPlanKey = (value?: string | null): PlanKey | undefined => {
+      if (!value) return undefined;
+      const upper = value.toUpperCase();
+      return PLAN_KEYS.find((key) => key === upper);
+    };
+
     (async () => {
       if (!myUserId) return;
       try {
-        // /api/timetables/ai API 호출 - AI 시간표만 반환
-        const aiTimetableRes = await getAITimetable(myUserId);
+        const response = await getAITimetable(myUserId);
         if (!mounted) return;
-        const slots = convertApiItemsToTimeSlots(aiTimetableRes.items as any);
-        const title = aiTimetableRes.title || 'AI 생성 시간표';
-        const createdAt = new Date(aiTimetableRes.createdAt).toLocaleString('ko-KR');
-        setAiTimetable({
-          id: String(aiTimetableRes.id),
-          createdAt,
-          slots,
-          title,
-          resultSummary: aiTimetableRes.resultSummary,
+        const nextPlans: Record<PlanKey, AITimetablePlan | null> = { A: null, B: null, C: null };
+        const payloads = Array.isArray(response) ? response : response ? [response] : [];
+
+        payloads.slice(0, PLAN_KEYS.length).forEach((plan, index) => {
+          if (!plan) return;
+          const planKey = toPlanKey((plan as any).planKey) ?? PLAN_KEYS[index];
+          const slots = convertApiItemsToTimeSlots(plan.items as any);
+          const createdAt = plan.createdAt ? new Date(plan.createdAt).toLocaleString('ko-KR') : '';
+          nextPlans[planKey] = {
+            planKey,
+            id: String(plan.id ?? plan.timetableId ?? `${planKey}-${index}`),
+            createdAt,
+            title: plan.title || `플랜 ${planKey} 시간표`,
+            resultSummary: plan.resultSummary,
+            slots,
+          };
         });
+
+        setAiTimetables(nextPlans);
+        const firstFilled = PLAN_KEYS.find((key) => nextPlans[key]);
+        setActivePlan(firstFilled ?? 'A');
       } catch {
-        // AI 시간표가 없거나 로딩 실패 시 null로 유지
-        setAiTimetable(null);
+        if (mounted) {
+          setAiTimetables({ A: null, B: null, C: null });
+        }
       }
     })();
     return () => { mounted = false; };
@@ -163,7 +197,7 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
     const title = `20${year}학년도 ${semesterLabel}`;
     try {
       const created = await createTimetable(myUserId, { year: fullYear, semester: semesterNumber, title });
-      const newTimetable: TimetableData = { id: created.id, year, semester, slots: [] };
+      const newTimetable: TimetableData = { id: created.id, year, semester, title: created.title || title, slots: [] };
       setPreviousTimetables([...previousTimetables, newTimetable]);
       toast.success(`${title} 시간표가 추가되었습니다.`);
     } catch (e: any) {
@@ -187,47 +221,72 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
     toast.success('시간표가 삭제되었습니다.');
   };
 
-  const handleDeleteAITimetable = async () => {
+  const handleDeleteAITimetable = async (planKey: PlanKey) => {
     if (!myUserId) {
       toast.error('사용자 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요.');
       return;
     }
+    const targetPlan = aiTimetables[planKey];
+    if (!targetPlan) {
+      toast.error(`플랜 ${planKey} 시간표가 비어 있습니다.`);
+      return;
+    }
 
     try {
-      await deleteAITimetable(myUserId);
-      setAiTimetable(null);
-      toast.success('AI 시간표가 삭제되었습니다.');
+      await deleteAITimetable(myUserId, planKey);
+      setAiTimetables((prev) => {
+        const updated = { ...prev, [planKey]: null };
+        if (activePlan === planKey) {
+          const nextActive = PLAN_KEYS.find((key) => updated[key]);
+          setActivePlan(nextActive ?? 'A');
+        }
+        return updated;
+      });
+      toast.success(`플랜 ${planKey} 시간표가 삭제되었습니다.`);
     } catch (e: any) {
       toast.error(e?.message || 'AI 시간표 삭제에 실패했습니다.');
     }
   };
 
-  const handleAddAITimetable = () => {
-    if (user.plan === 'free' && aiTimetable !== null) {
-      // 무료 플랜이고 이미 시간표가 있으면 업그레이드 유도
-      setShowPurchaseModal(true);
-      toast.error('무료 플랜은 AI 시간표를 1개만 생성할 수 있습니다.');
-    } else {
-      // 프리미엄이거나 시간표가 없으면 생성 (여기서는 샘플로 채팅봇으로 이동)
-      navigate('chatbot');
+  const handleAddAITimetable = (planKey: PlanKey) => {
+    if (aiTimetables[planKey] && typeof window !== 'undefined') {
+      const confirmed = window.confirm(`플랜 ${planKey} 시간표를 새로 생성하시겠습니까?\n기존 내용은 덮어씁니다.`);
+      if (!confirmed) return;
     }
+    sessionStorage?.setItem('aiPlanTarget', planKey);
+    navigate('chatbot');
   };
 
-  const renderTimetableCard = (slots: TimeSlot[], index: number, title: string, showDelete: boolean = false) => {
+  const renderTimetableCard = (
+    slots: TimeSlot[],
+    index: number,
+    title: string,
+    showDelete: boolean = false,
+    subtitle?: string,
+  ) => {
     const { majorCredits, generalCredits, totalCredits } = calculateCredits(slots);
+    const showAIBadge = title.includes('시간표');
 
     return (
       <Card key={index} className="p-4 hover:shadow-[0_0_30px_rgba(140,69,255,0.3)] transition-all bg-black/60 backdrop-blur-md border-white/15">
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h4 className="text-white">{title}</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="text-white">{title}</h4>
+            </div>
+            {subtitle && <p className="text-white/50 text-xs mt-0.5">{subtitle}</p>}
             <div className="flex items-center gap-3 text-xs mt-1">
               <span className="text-purple-400">전공 {majorCredits}학점</span>
               <span className="text-blue-400">교양 {generalCredits}학점</span>
               <span className="text-white/60">총 {totalCredits}학점</span>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {showAIBadge && (
+              <span className="px-2.5 py-0.5 text-[12px] font-semibold rounded-full bg-purple-600/20 text-purple-300 shadow-[0_0_20px_rgba(140,69,255,0.5)]">
+                AI
+              </span>
+            )}
             <Button 
               variant="ghost" 
               size="sm" 
@@ -405,11 +464,13 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
                     const semesterLabel = timetable.semester === 'summer' ? '여름학기' : 
                                         timetable.semester === 'winter' ? '겨울학기' : 
                                         `${timetable.semester}학기`;
+                    const subtitle = `${timetable.year}학년도 ${semesterLabel}`;
                     return renderTimetableCard(
                       timetable.slots, 
                       index, 
-                      `${timetable.year}학년도 ${semesterLabel}`,
-                      true // showDelete
+                      timetable.title,
+                      true,
+                      subtitle,
                     );
                   })}
                 </div>
@@ -443,83 +504,135 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
                 </div>
               )}
 
-              {/* Add AI Timetable Button */}
-              {!aiTimetable && (
-                <Card className="p-12 text-center bg-black/40 backdrop-blur-md border-white/10 border-dashed">
-                  <div className="mx-auto size-16 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full flex items-center justify-center mb-4">
-                    <Sparkles className="size-8 text-purple-400" />
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-2">
+                    {PLAN_KEYS.map((planKey) => {
+                      const plan = aiTimetables[planKey];
+                      const isActive = activePlan === planKey;
+                      return (
+                        <button
+                          key={planKey}
+                          onClick={() => setActivePlan(planKey)}
+                          className={`px-4 py-2 rounded-lg border text-left transition ${
+                            isActive
+                              ? 'bg-gradient-to-r from-purple-600 to-blue-600 border-white/40 text-white shadow-[0_0_20px_rgba(140,69,255,0.4)]'
+                              : 'bg-black/50 border-white/20 text-white/70 hover:text-white'
+                          }`}
+                        >
+                          <div className="text-xs uppercase tracking-wide">플랜 {planKey}</div>
+                          <div className="text-sm font-medium">
+                            {plan ? plan.title : '미생성'}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
-                  <h3 className="text-white mb-2">AI 시간표를 만들어보세요</h3>
-                  <p className="text-white/60 text-sm mb-6 max-w-md mx-auto">
-                    AI와 채팅하여 나에게 맞는 완벽한 시간표를 몇 초 만에 생성하세요
+                  <p className="text-white/60 text-xs">
+                    최대 3개의 AI 시간표를 관리하고 상황에 맞게 전환하세요.
                   </p>
-                  <Button
-                    onClick={handleAddAITimetable}
-                    className="gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 shadow-[0_0_20px_rgba(140,69,255,0.4)]"
-                  >
-                    <Sparkles className="size-4" />
-                    AI 시간표 생성하기
-                  </Button>
-                </Card>
-              )}
-
-              {/* AI Timetable */}
-              {aiTimetable && (
-                <div className="grid gap-4">
-                  <Card className="p-4 hover:shadow-[0_0_30px_rgba(140,69,255,0.3)] transition-all bg-black/60 backdrop-blur-md border-white/15">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <h4 className="text-white">AI 생성 시간표</h4>
-                        <p className="text-xs text-white/50 mt-1">{aiTimetable.createdAt}</p>
-                        <div className="flex items-center gap-3 text-xs mt-1">
-                          {(() => {
-                            const { majorCredits, generalCredits, totalCredits } = calculateCredits(aiTimetable.slots);
-                            return (
-                              <>
-                                <span className="text-purple-400">전공 {majorCredits}학점</span>
-                                <span className="text-blue-400">교양 {generalCredits}학점</span>
-                                <span className="text-white/60">총 {totalCredits}학점</span>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="gap-1 text-white/80 hover:text-white hover:bg-white/10"
-                          onClick={() => setSelectedTimetable({ slots: aiTimetable.slots, title: 'AI 생성 시간표' })}
-                        >
-                          <Maximize2 className="size-3" />
-                          확대
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="gap-1 text-white/80 hover:text-white hover:bg-white/10"
-                          onClick={() => onEditTimetable({ title: 'AI 생성 시간표', slots: aiTimetable.slots })}
-                        >
-                          <Edit2 className="size-3" />
-                          수정
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="gap-1 text-red-400/80 hover:text-red-400 hover:bg-red-500/10"
-                          onClick={handleDeleteAITimetable}
-                        >
-                          <Trash2 className="size-3" />
-                          삭제
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="h-[450px] rounded-lg overflow-hidden bg-black/40">
-                      <TimetableGrid timetable={aiTimetable.slots} />
-                    </div>
-                  </Card>
                 </div>
-              )}
+
+                {(() => {
+                  const plan = aiTimetables[activePlan];
+                  if (plan) {
+                    const { majorCredits, generalCredits, totalCredits } = calculateCredits(plan.slots);
+                    const showAIBadge = plan.title.includes('시간표');
+                    return (
+                      <Card className="p-4 hover:shadow-[0_0_30px_rgba(140,69,255,0.3)] transition-all bg-black/60 backdrop-blur-md border-white/15">
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-full text-[11px] bg-gradient-to-r from-purple-600/60 to-blue-600/60 border border-white/20 text-white">
+                                플랜 {activePlan}
+                              </span>
+                              <h4 className="text-white">{plan.title}</h4>
+                            </div>
+                            {plan.createdAt && (
+                              <p className="text-xs text-white/50 mt-1">생성일: {plan.createdAt}</p>
+                            )}
+                            <div className="flex items-center gap-3 text-xs mt-1">
+                              <span className="text-purple-400">전공 {majorCredits}학점</span>
+                              <span className="text-blue-400">교양 {generalCredits}학점</span>
+                              <span className="text-white/60">총 {totalCredits}학점</span>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2 justify-end items-center">
+                            {showAIBadge && (
+                              <span className="px-2.5 py-0.5 text-[12px] font-semibold rounded-full bg-purple-600/20 text-purple-300 shadow-[0_0_20px_rgba(140,69,255,0.5)]">
+                                AI
+                              </span>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="gap-1 text-white/80 hover:text-white hover:bg-white/10"
+                              onClick={() => setSelectedTimetable({ slots: plan.slots, title: plan.title })}
+                            >
+                              <Maximize2 className="size-3" />
+                              확대
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="gap-1 text-white/80 hover:text-white hover:bg-white/10"
+                              onClick={() => onEditTimetable({ id: Number(plan.id) || 0, title: plan.title, slots: plan.slots })}
+                            >
+                              <Edit2 className="size-3" />
+                              수정
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="gap-1 text-white/80 hover:text-white hover:bg-white/10"
+                              onClick={() => handleAddAITimetable(activePlan)}
+                            >
+                              <Sparkles className="size-3 text-purple-300" />
+                              다시 생성
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="gap-1 text-red-400/80 hover:text-red-400 hover:bg-red-500/10"
+                              onClick={() => handleDeleteAITimetable(activePlan)}
+                            >
+                              <Trash2 className="size-3" />
+                              삭제
+                            </Button>
+                          </div>
+                        </div>
+                        {plan.resultSummary && (
+                          <div className="p-3 mb-3 bg-white/5 rounded-lg border border-white/10 text-xs text-white/80">
+                            {plan.resultSummary}
+                          </div>
+                        )}
+                        <div className="h-[450px] rounded-lg overflow-hidden bg-black/40">
+                          <TimetableGrid timetable={plan.slots} />
+                        </div>
+                      </Card>
+                    );
+                  }
+
+                  return (
+                    <Card className="p-12 text-center bg-black/40 backdrop-blur-md border-white/10 border-dashed">
+                      <div className="mx-auto size-16 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full flex items-center justify-center mb-4">
+                        <Sparkles className="size-8 text-purple-400" />
+                      </div>
+                      <h3 className="text-white mb-2">플랜 {activePlan} 시간표를 만들어보세요</h3>
+                      <p className="text-white/60 text-sm mb-6 max-w-md mx-auto">
+                        각 상황에 맞는 시간표를 미리 준비해두면 빠르게 비교하고 선택할 수 있어요.
+                      </p>
+                      <Button
+                        onClick={() => handleAddAITimetable(activePlan)}
+                        className="gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 shadow-[0_0_20px_rgba(140,69,255,0.4)]"
+                      >
+                        <Sparkles className="size-4" />
+                        플랜 {activePlan} 시간표 생성
+                      </Button>
+                    </Card>
+                  );
+                })()}
+              </div>
             </TabsContent>
           </Tabs>
         </motion.div>

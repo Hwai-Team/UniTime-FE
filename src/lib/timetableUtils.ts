@@ -64,12 +64,23 @@ export function getCourseType(category: string): 'major' | 'general' {
   // 교필(교양필수), 교선(교양선택) 등은 general
   const majorCategories = ['전필', '전선', '전심', '전기', '전공'];
   const generalCategories = ['교필', '교선', '교양', '기교'];
+
+  const normalizedCategory = category?.trim() || '';
+  const firstChar = normalizedCategory[0];
+
+  if (firstChar === '전') {
+    return 'major';
+  }
+
+  if (firstChar === '교') {
+    return 'general';
+  }
   
-  if (majorCategories.some(cat => category.includes(cat))) {
+  if (majorCategories.some(cat => normalizedCategory.includes(cat))) {
     return 'major';
   }
   
-  if (generalCategories.some(cat => category.includes(cat))) {
+  if (generalCategories.some(cat => normalizedCategory.includes(cat))) {
     return 'general';
   }
   
