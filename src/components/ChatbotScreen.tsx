@@ -17,6 +17,7 @@ interface Message {
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
+  animate?: boolean;
 }
 
 interface ChatbotScreenProps {
@@ -37,6 +38,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
   const [isTimetableGenerating, setIsTimetableGenerating] = useState(false);
   const [myUserId, setMyUserId] = useState<number | null>(null);
   const [canGenerate, setCanGenerate] = useState(false);
+  const [canModify, setCanModify] = useState(false);
   const [generateSuggestion, setGenerateSuggestion] = useState<string>('');
   const [currentTimetableId, setCurrentTimetableId] = useState<number | null>(null);
   const [currentTimetableTitle, setCurrentTimetableTitle] = useState<string>('');
@@ -70,6 +72,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
           text: h.content,
           sender: h.role === 'USER' ? 'user' : 'ai',
           timestamp: new Date(h.createdAt),
+          animate: false,
         }));
         setMessages(mapped);
       } catch {
@@ -102,6 +105,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
             text: h.content,
             sender: h.role === 'USER' ? 'user' : 'ai',
             timestamp: new Date(h.createdAt),
+            animate: false,
           }));
           setMessages(mapped);
 
@@ -122,6 +126,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
               if (mounted) {
                 setCanGenerate(!!vis.visible);
                 setGenerateSuggestion(vis.suggestionText || '');
+                setCanModify(false);
               }
             } catch {
               // 실패 시 기존 상태 유지
@@ -139,6 +144,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
             text: initialMessage,
             sender: 'user',
             timestamp: new Date(),
+            animate: false,
           };
           if (mounted) {
             setMessages(prev => [...prev, userMessage]);
@@ -154,6 +160,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
             text: res.reply,
             sender: 'ai',
             timestamp: new Date(),
+            animate: true,
           };
           setMessages(prev => [...prev, aiMessage]);
 
@@ -171,6 +178,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
             if (mounted) {
               setCanGenerate(!!vis.visible);
               setGenerateSuggestion(vis.suggestionText || '');
+              setCanModify(false);
             }
           } catch {
             // 실패 시 기존 상태 유지
@@ -185,6 +193,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
               text: h.content,
               sender: h.role === 'USER' ? 'user' : 'ai',
               timestamp: new Date(h.createdAt),
+              animate: false,
             }));
             setMessages(updatedMapped);
           } catch {
@@ -198,11 +207,12 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
         } catch {
           if (!mounted) return;
           // history 로드 실패 시에도 initialMessage는 전송 시도
-          const userMessage: Message = {
+        const userMessage: Message = {
             id: Date.now().toString(),
             text: initialMessage,
             sender: 'user',
             timestamp: new Date(),
+          animate: false,
           };
           setMessages([userMessage]);
           setIsChatLoading(true);
@@ -212,11 +222,12 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
             const res = await sendChatMessage({ userId: uid, message: initialMessage });
             if (!mounted) return;
             
-            const aiMessage: Message = {
+        const aiMessage: Message = {
               id: (Date.now() + 1).toString(),
               text: res.reply,
               sender: 'ai',
               timestamp: new Date(),
+          animate: true,
             };
             setMessages(prev => [...prev, aiMessage]);
 
@@ -230,6 +241,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
               if (mounted) {
                 setCanGenerate(!!vis.visible);
                 setGenerateSuggestion(vis.suggestionText || '');
+                setCanModify(false);
               }
             } catch {
               // 실패 시 기존 상태 유지
@@ -241,6 +253,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
               text: '응답을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
               sender: 'ai',
               timestamp: new Date(),
+              animate: false,
             };
             setMessages(prev => [...prev, aiMessage]);
           } finally {
@@ -268,6 +281,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
       text: message,
       sender: 'user',
       timestamp: new Date(),
+      animate: false,
     };
 
     // optimistic: add only user message
@@ -282,6 +296,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
         text: res.reply,
         sender: 'ai',
         timestamp: new Date(),
+        animate: true,
       };
       setMessages(prev => [...prev, aiMessage]);
 
@@ -298,6 +313,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
         });
         setCanGenerate(!!vis.visible);
         setGenerateSuggestion(vis.suggestionText || '');
+        setCanModify(timetable.length > 0 ? !!vis.visible : false);
       } catch {
         // 실패 시 기존 상태 유지
       }
@@ -307,6 +323,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
         text: '응답을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
         sender: 'ai',
         timestamp: new Date(),
+        animate: false,
       };
       setMessages(prev => [...prev, aiMessage]);
     } finally {
@@ -407,6 +424,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
       const slots = convertApiItemsToTimeSlots(apiItems);
       console.log('변환된 시간표 슬롯:', slots);
       setTimetable(slots);
+      setCanModify(false);
       setCurrentTimetableId(res.id); // 생성된 시간표 ID 저장
       setCurrentTimetableTitle(res.title || '시간표가 생성되었습니다!');
       
@@ -423,6 +441,10 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
   };
 
   const handleModifyTimetable = async () => {
+    if (!canModify) {
+      toast.error('아직 시간표 수정 조건이 충족되지 않았어요.');
+      return;
+    }
     if (messages.length < 2) {
       toast.error('대화 내용을 바탕으로 수정 요청을 해주세요.');
       return;
@@ -496,6 +518,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
       const slots = convertApiItemsToTimeSlots(apiItems);
       console.log('변환된 시간표 슬롯 (수정):', slots);
       setTimetable(slots);
+      setCanModify(false);
       setCurrentTimetableId(res.id); // 수정된 시간표 ID 저장
       setCurrentTimetableTitle(res.title || '시간표가 수정되었습니다!');
       
@@ -521,6 +544,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
       setCurrentTimetableTitle('');
       setCanGenerate(false);
       setGenerateSuggestion('');
+      setCanModify(false);
       // initialMessage 처리 상태도 초기화
       processedInitialMessageRef.current = null;
       // initialMessage도 초기화하여 재사용 방지
@@ -647,6 +671,7 @@ export default function ChatbotScreen({ user, setUser, navigate, initialMessage,
           onModifyTimetable={handleModifyTimetable}
           isGenerating={isTimetableGenerating}
           hasEnoughMessages={canGenerate}
+          canModifyTimetable={canModify}
         />
       </div>
 

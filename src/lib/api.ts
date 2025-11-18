@@ -479,13 +479,15 @@ export async function saveAITimetable(body: SaveAITimetableRequest) {
 }
 
 export async function getAITimetable(userId: number) {
-	return request<AITimetableResponse>(`/timetables/ai?userId=${userId}`, {
+	return request<AITimetableResponse | AITimetableResponse[]>(`/timetables/ai?userId=${userId}`, {
 		method: 'GET',
 	});
 }
 
-export async function deleteAITimetable(userId: number) {
-	return request<void>(`/timetables/ai?userId=${userId}`, {
+export async function deleteAITimetable(userId: number, planKey?: string) {
+	const qs = new URLSearchParams({ userId: String(userId) });
+	if (planKey) qs.set('plan', planKey);
+	return request<void>(`/timetables/ai?${qs.toString()}`, {
 		method: 'DELETE',
 	});
 }

@@ -70,7 +70,7 @@ export default function ChatPanel({
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 chat-typography text-[15px] leading-relaxed text-white/90">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-4 max-w-md px-4">
@@ -109,7 +109,7 @@ export default function ChatPanel({
             onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
             placeholder={isLoading ? "AI가 답변 중..." : "메시지 입력..."}
             disabled={isLoading}
-            className="flex-1 rounded-xl bg-white/5 border-white/15 text-white placeholder:text-white/40 focus:border-purple-500/50 focus:ring-purple-500/20 px-4 disabled:opacity-50"
+            className="flex-1 rounded-xl bg-white/7 border-white/20 text-white chat-input-field text-[15px] tracking-tight placeholder:text-white/50 focus:border-purple-400/60 focus:ring-2 focus:ring-purple-500/30 px-4 disabled:opacity-50"
           />
           <Button
             onClick={handleSendMessage}

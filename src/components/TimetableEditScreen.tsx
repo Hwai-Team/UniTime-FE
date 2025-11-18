@@ -6,7 +6,7 @@ import { ArrowLeft, Save, Plus, Trash2, Image } from 'lucide-react';
 import { toast } from 'sonner';
 import TimetableGrid from './TimetableGrid';
 import CourseSearchDialog from './CourseSearchDialog';
-import { uploadTimetableImage, updateTimetable, searchCourses, getTimetable } from '../lib/api';
+import { uploadTimetableImage, updateTimetable, searchCourses } from '../lib/api';
 
 interface TimeSlot {
   day: string;
@@ -54,6 +54,66 @@ const MAJOR_PERIODS: { [key: string]: { time: string; range: string } } = {
   '26': { time: '16:00', range: '16:30~17:45' },
 };
 
+const timeStringToMinutes = (time: string) => {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+};
+
+const minutesToTimeString = (minutes: number) => {
+  const h = Math.floor(minutes / 60)
+    .toString()
+    .padStart(2, '0');
+  const m = (minutes % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+};
+
+const GENERAL_SEGMENTS = Object.entries(GENERAL_PERIODS).map(([key, info]) => {
+  const [, endTime] = info.range.split('~');
+  return {
+    key,
+    info,
+    start: timeStringToMinutes(info.time),
+    end: timeStringToMinutes(endTime),
+  };
+});
+
+const MAJOR_SEGMENTS = Object.entries(MAJOR_PERIODS).map(([key, info]) => {
+  const [, endTime] = info.range.split('~');
+  return {
+    key,
+    info,
+    start: timeStringToMinutes(info.time),
+    end: timeStringToMinutes(endTime),
+  };
+});
+
+const parseActualTimeValue = (value: number | string): number => {
+  if (typeof value === 'number') {
+    if (value >= 100) {
+      const hours = Math.floor(value / 100);
+      const minutes = value % 100;
+      return hours * 60 + minutes;
+    }
+    return Math.round(value * 60);
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.includes(':')) {
+    return timeStringToMinutes(trimmed);
+  }
+
+  const numeric = Number(trimmed);
+  if (!Number.isNaN(numeric) && numeric >= 0) {
+    if (numeric >= 100) {
+      const hours = Math.floor(numeric / 100);
+      const minutes = numeric % 100;
+      return hours * 60 + minutes;
+    }
+    return Math.round(numeric * 60);
+  }
+  return 0;
+};
+
 export default function TimetableEditScreen({ timetable, onSave, onCancel }: TimetableEditScreenProps) {
   const [slots, setSlots] = useState<TimeSlot[]>(timetable.slots);
   const [title, setTitle] = useState<string>(timetable.title);
@@ -74,15 +134,7 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
     const saving = toast.loading('시간표를 저장하는 중...');
     
     try {
-      // 1. 기존 시간표 데이터 가져오기
-      const existingTimetable = await getTimetable(timetable.id);
-      
-      // 2. 기존 items를 courseId Set으로 변환
-      const existingCourseIds = new Set(
-        existingTimetable.items.map(item => item.courseId)
-      );
-      
-      // 3. 새로운 slots -> 고유 과목 기준으로 courseId 목록 생성
+      // 새로운 slots -> 고유 과목 기준으로 courseId 목록 생성
       const newUnique = new Map<string, { courseId: number }>();
       const invalidSlots: string[] = [];
       
@@ -109,26 +161,7 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
         }
       }
       
-      const newCourseIds = new Set(Array.from(newUnique.values()).map(item => item.courseId));
-      
-      // 4. 추가/삭제된 항목 계산
-      const addedCourseIds = Array.from(newCourseIds).filter(id => !existingCourseIds.has(id));
-      const removedCourseIds = Array.from(existingCourseIds).filter(id => !newCourseIds.has(id));
-      
-      // 5. 최종 items 생성 (기존 항목 + 추가된 항목 - 삭제된 항목)
-      const finalItems: Array<{ courseId: number }> = [];
-      
-      // 기존 항목 중 삭제되지 않은 것들 유지
-      existingTimetable.items.forEach(item => {
-        if (!removedCourseIds.includes(item.courseId)) {
-          finalItems.push({ courseId: item.courseId });
-        }
-      });
-      
-      // 새로 추가된 항목들 추가
-      addedCourseIds.forEach(courseId => {
-        finalItems.push({ courseId });
-      });
+      const finalItems: Array<{ courseId: number }> = Array.from(newUnique.values());
       
       if (finalItems.length === 0 && invalidSlots.length === 0) {
         toast.error('저장할 과목이 없습니다. 과목을 추가해 주세요.', { id: saving });
@@ -139,26 +172,14 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
         toast.warning(`${invalidSlots.length}개의 과목은 저장되지 않았습니다.`, { id: saving });
       }
 
-      // 6. 변경사항이 있는지 확인
-      const hasChanges = addedCourseIds.length > 0 || removedCourseIds.length > 0 || title !== existingTimetable.title;
-      
-      if (!hasChanges) {
-        toast.info('변경사항이 없습니다.', { id: saving });
-        return;
-      }
-
-      // 7. 업데이트 요청
+      // 업데이트 요청
       await updateTimetable(timetable.id, { 
-        title: title !== existingTimetable.title ? title : undefined,
+        title,
         items: finalItems 
       });
       
-      const changeMessages = [];
-      if (addedCourseIds.length > 0) changeMessages.push(`${addedCourseIds.length}개 추가`);
-      if (removedCourseIds.length > 0) changeMessages.push(`${removedCourseIds.length}개 삭제`);
-      
       toast.success(
-        `시간표가 저장되었습니다.${changeMessages.length > 0 ? ` (${changeMessages.join(', ')})` : ''}`,
+        `시간표가 저장되었습니다.`,
         { id: saving }
       );
       onSave();
@@ -229,15 +250,21 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
 
         const newSlots: TimeSlot[] = [];
         courses.forEach((course: any) => {
-          // 교시 범위로 타입 판단 (21-26: 전공, 1-9: 교양, 그 외: 교시 범위에 따라)
-          let courseType: 'major' | 'general' = 'general';
-          if (course.startPeriod >= 21 && course.startPeriod <= 26) {
-            courseType = 'major';
-          } else if (course.category === '전필' || course.category === '전선') {
+          // 시간 기반 과목 타입 판단 (카테고리 우선)
+          const category = course.category || '';
+          let courseType: 'major' | 'general' =
+            category.includes('전') ? 'major' : 'general';
+          const numericStart = Number(course.startPeriod);
+          if (
+            Number.isInteger(numericStart) &&
+            numericStart >= 21 &&
+            numericStart <= 26
+          ) {
             courseType = 'major';
           }
           
           const periods = courseType === 'major' ? MAJOR_PERIODS : GENERAL_PERIODS;
+          const segments = courseType === 'major' ? MAJOR_SEGMENTS : GENERAL_SEGMENTS;
 
           const dayMap: { [key: string]: string } = {
             'MON': '월', 'TUE': '화', 'WED': '수', 'THU': '목', 'FRI': '금'
@@ -247,46 +274,104 @@ export default function TimetableEditScreen({ timetable, onSave, onCancel }: Tim
           const identifier = String(course.courseId || course.courseName);
           const actualCourseId = courseCodeMap.get(identifier) || (course.courseId && !isNaN(Number(course.courseId)) ? Number(course.courseId) : undefined);
           
-          // 교시 범위 처리 (1-9 또는 21-26 범위가 아닌 경우도 처리)
-          for (let p = course.startPeriod; p <= course.endPeriod; p++) {
-            const periodKey = String(p);
-            let periodInfo = periods[periodKey];
-            
-            // 교시 정보가 없으면 동적으로 생성 (1-9 또는 21-26 범위가 아닌 경우)
-            if (!periodInfo) {
-              // 일반 교시로 처리 (50분 단위, 1교시 = 09:00)
-              if (p >= 1 && p <= 20) {
-                // 1-20교시: 일반 교시 형식 (50분)
-                const hour = 8 + p; // 1교시 = 9시, 2교시 = 10시...
-                const startHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-                const endHour = hour + 1;
-                const endTime = endHour < 10 ? `0${endHour}:50` : `${endHour}:50`;
-                periodInfo = { time: startHour, range: `${startHour}~${endTime}` };
-              } else if (p > 20) {
-                // 21 이상: 전공 교시 형식 (75분) - 동적 생성
-                const adjustedPeriod = p - 20; // 21 -> 1, 22 -> 2, ...
-                const hour = 8 + adjustedPeriod;
-                const startHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-                const endHour = hour + 1;
-                const endTime = endHour < 10 ? `0${endHour}:15` : `${endHour}:15`;
-                periodInfo = { time: startHour, range: `${startHour}~${endTime}` };
+          const startValue =
+            typeof course.startPeriod === 'string'
+              ? course.startPeriod
+              : Number(course.startPeriod);
+          const endValue =
+            typeof course.endPeriod === 'string'
+              ? course.endPeriod
+              : Number(course.endPeriod);
+
+          const isActualTime =
+            (typeof startValue === 'string' && startValue.includes(':')) ||
+            (typeof endValue === 'string' && endValue.includes(':')) ||
+            (typeof startValue === 'number' && startValue >= 100) ||
+            (typeof endValue === 'number' && endValue >= 100);
+
+          if (
+            !isActualTime &&
+            Number.isInteger(Number(startValue)) &&
+            Number.isInteger(Number(endValue))
+          ) {
+            // 기존 교시 번호 방식
+            const startPeriod = Number(startValue);
+            const endPeriod = Number(endValue);
+            for (let p = startPeriod; p <= endPeriod; p++) {
+              const periodKey = String(p);
+              let periodInfo = periods[periodKey];
+              
+              if (!periodInfo) {
+                if (p >= 1 && p <= 20) {
+                  const hour = 8 + p;
+                  const startHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                  const endHour = hour + 1;
+                  const endTime = endHour < 10 ? `0${endHour}:50` : `${endHour}:50`;
+                  periodInfo = { time: startHour, range: `${startHour}~${endTime}` };
+                } else if (p > 20) {
+                  const adjustedPeriod = p - 20;
+                  const hour = 8 + adjustedPeriod;
+                  const startHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+                  const endHour = hour + 1;
+                  const endTime = endHour < 10 ? `0${endHour}:15` : `${endHour}:15`;
+                  periodInfo = { time: startHour, range: `${startHour}~${endTime}` };
+                }
+              }
+              
+              if (periodInfo) {
+                newSlots.push({
+                  day,
+                  time: `${periodInfo.time}~${periodInfo.range.split('~')[1]}`,
+                  period: periodKey,
+                  subject: course.courseName,
+                  courseCode: identifier,
+                  courseId: actualCourseId,
+                  room: course.room || '',
+                  credits: course.credits || 3,
+                  type: courseType,
+                });
               }
             }
-            
-            if (periodInfo) {
-              newSlots.push({
-                day,
-                time: periodInfo.time,
-                period: periodKey,
-                subject: course.courseName,
-                courseCode: identifier,
-                courseId: actualCourseId,
-                room: course.room || '',
-                credits: course.credits || 3,
-                type: courseType,
-              });
-            }
+            return;
           }
+
+          const startMinutes = parseActualTimeValue(startValue);
+          let endMinutes = parseActualTimeValue(endValue);
+          while (endMinutes <= startMinutes) {
+            endMinutes += 12 * 60;
+          }
+
+          const overlapping = segments.filter(
+            (segment) => startMinutes < segment.end && endMinutes > segment.start,
+          );
+
+          const fallbackSegments =
+            overlapping.length > 0
+              ? overlapping
+              : segments.length > 0
+                ? [segments.reduce((closest, segment) => {
+                    const diff = Math.abs(segment.start - startMinutes);
+                    if (!closest) return segment;
+                    const currentDiff = Math.abs(closest.start - startMinutes);
+                    return diff < currentDiff ? segment : closest;
+                }, segments[0])]
+                : [];
+
+          fallbackSegments.forEach((segment) => {
+            newSlots.push({
+              day,
+              time: `${minutesToTimeString(startMinutes)}~${minutesToTimeString(
+                endMinutes % (24 * 60),
+              )}`,
+              period: segment.key,
+              subject: course.courseName,
+              courseCode: identifier,
+              courseId: actualCourseId,
+              room: course.room || '',
+              credits: course.credits || 3,
+              type: courseType,
+            });
+          });
         });
 
         if (newSlots.length > 0) {

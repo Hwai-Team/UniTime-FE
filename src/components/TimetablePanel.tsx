@@ -2,7 +2,7 @@ import { Calendar, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import TimetableGrid from './TimetableGrid';
-import type { TimeSlot } from '../lib/timetableUtils';
+import { calculateCredits, type TimeSlot } from '../lib/timetableUtils';
 
 interface TimetablePanelProps {
   timetable: TimeSlot[];
@@ -10,6 +10,7 @@ interface TimetablePanelProps {
   onModifyTimetable: () => void;
   isGenerating?: boolean;
   hasEnoughMessages: boolean;
+  canModifyTimetable: boolean;
 }
 
 export default function TimetablePanel({ 
@@ -17,24 +18,10 @@ export default function TimetablePanel({
   onGenerateTimetable, 
   onModifyTimetable,
   isGenerating = false,
-  hasEnoughMessages 
+  hasEnoughMessages,
+  canModifyTimetable,
 }: TimetablePanelProps) {
-  // Calculate credit statistics
-  const calculateCredits = () => {
-    const majorCredits = timetable
-      .filter(slot => slot.type === 'major')
-      .reduce((sum, slot) => sum + (slot.credits || 0), 0);
-    
-    const generalCredits = timetable
-      .filter(slot => slot.type === 'general')
-      .reduce((sum, slot) => sum + (slot.credits || 0), 0);
-    
-    const totalCredits = majorCredits + generalCredits;
-    
-    return { majorCredits, generalCredits, totalCredits };
-  };
-
-  const { majorCredits, generalCredits, totalCredits } = calculateCredits();
+  const { majorCredits, generalCredits, totalCredits } = calculateCredits(timetable);
 
   return (
     <div className="flex-1 bg-black/30 backdrop-blur-sm p-4 overflow-hidden flex flex-col">
@@ -66,7 +53,7 @@ export default function TimetablePanel({
                 </div>
                 <Button
                   onClick={onModifyTimetable}
-                  disabled={isGenerating}
+                  disabled={isGenerating || !canModifyTimetable}
                   size="sm"
                   className="gap-1.5 bg-white/10 hover:bg-white/20 text-white border border-white/15 disabled:opacity-50 disabled:cursor-not-allowed text-xs h-8 flex-shrink-0"
                 >
@@ -83,6 +70,13 @@ export default function TimetablePanel({
                   )}
                 </Button>
               </div>
+              {!canModifyTimetable && (
+                <div className="mt-3 pt-3 border-t border-white/10">
+                  <p className="text-xs text-white/50">
+                    먼저 왼쪽 채팅에서 수정 요청을 전달하면 버튼이 활성화됩니다.
+                  </p>
+                </div>
+              )}
             </Card>
           ) : (
             <Card className="p-4 bg-black/40 backdrop-blur-md border-white/10 border-dashed">

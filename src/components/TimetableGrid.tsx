@@ -63,24 +63,20 @@ const PERIOD_TIME: Record<
   26: { start: 16.5, end: 17.75 }, // 16:30 ~ 17:45
 };
 
-// 전공 과목 색상 (보라색 계열)
-const MAJOR_COLORS = [
-  '#9D8FE8',
-  '#B89FE8',
-  '#8B7FD6',
-  '#A896E8',
-  '#7A6FCC',
-  '#C5B3FF',
-];
-
-// 교양 과목 색상 (파란색 계열)
-const GENERAL_COLORS = [
-  '#7FCCC0',
-  '#6BC5B8',
-  '#5AB9AC',
-  '#8FD8CC',
-  '#4DADA0',
-  '#A3E8DD',
+// 전공/교양 구분 없이 사용할 고대비 팔레트
+const SUBJECT_COLORS = [
+  '#EF476F', // 진한 핑크
+  '#F78C6B', // 살몬 오렌지
+  '#FFD166', // 따뜻한 옐로우
+  '#06D6A0', // 선명한 민트
+  '#1FAB89', // 청록
+  '#118AB2', // 대비 있는 블루
+  '#5E60CE', // 퍼플
+  '#8338EC', // 보라
+  '#FF5D8F', // 비비드 핑크
+  '#FF4C29', // 코럴 레드
+  '#2EC4B6', // 그린 블루
+  '#1B998B', // 다크 민트
 ];
 
 const LABEL_COL_WIDTH = 70; // 왼쪽 시간 라벨 넓이(px)
@@ -93,12 +89,10 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
 
   // 과목별 색상
   const subjectColorMap = new Map<string, string>();
-  const getColorForSubject = (subject: string, type?: 'major' | 'general') => {
+  const getColorForSubject = (subject: string) => {
     if (!subjectColorMap.has(subject)) {
-      const isMajor = type === 'major';
-      const colors = isMajor ? MAJOR_COLORS : GENERAL_COLORS;
-      const colorIndex = subjectColorMap.size % colors.length;
-      subjectColorMap.set(subject, colors[colorIndex]);
+      const colorIndex = subjectColorMap.size % SUBJECT_COLORS.length;
+      subjectColorMap.set(subject, SUBJECT_COLORS[colorIndex]);
     }
     return subjectColorMap.get(subject)!;
   };
@@ -234,49 +228,11 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
             const heightPercent =
               ((slot.endHour - slot.startHour) / HOUR_SPAN) * 100;
 
-            // 블록 높이와 과목명 길이에 따라 글씨 크기 조정 (블록이 작을수록 글씨를 더 작게)
-            const blockHeightHours = slot.endHour - slot.startHour;
-            const subjectLength = slot.subject.length;
-            let subjectFontSize = 'text-[11px]';
-            let roomFontSize = 'text-[10px]';
-            let padding = 'p-1.5';
-            let lineClamp = 'line-clamp-2';
-            
-            // 블록 높이와 과목명 길이를 모두 고려
-            if (blockHeightHours >= 1.8) { // 2교시 이상
-              subjectFontSize = 'text-[11px]';
-              roomFontSize = 'text-[10px]';
-              padding = 'p-1.5';
-              lineClamp = 'line-clamp-2';
-            } else if (blockHeightHours >= 1.3) { // 약 1.5-2교시
-              subjectFontSize = subjectLength > 8 ? 'text-[9px]' : 'text-[10px]';
-              roomFontSize = 'text-[9px]';
-              padding = 'p-1.5';
-              lineClamp = 'line-clamp-2';
-            } else if (blockHeightHours >= 0.85) { // 약 1-1.5교시
-              subjectFontSize = subjectLength > 6 ? 'text-[8px]' : 'text-[9px]';
-              roomFontSize = 'text-[8px]';
-              padding = 'p-1';
-              lineClamp = 'line-clamp-2';
-            } else { // 1교시 미만 (50분 미만) - 가장 작은 블록
-              // 과목명이 길면 더 작은 글씨 사용
-              if (subjectLength > 8) {
-                subjectFontSize = 'text-[7px]';
-                roomFontSize = 'text-[6px]';
-                padding = 'p-0.5';
-                lineClamp = 'line-clamp-3'; // 3줄까지 허용
-              } else if (subjectLength > 5) {
-                subjectFontSize = 'text-[8px]';
-                roomFontSize = 'text-[7px]';
-                padding = 'p-0.5';
-                lineClamp = 'line-clamp-2';
-              } else {
-                subjectFontSize = 'text-[9px]';
-                roomFontSize = 'text-[8px]';
-                padding = 'p-0.5';
-                lineClamp = 'line-clamp-2';
-              }
-            }
+            // ✅ 모든 블록에 동일한 폰트/패딩 적용
+            const subjectFontSize = 'text-[9px]';
+            const roomFontSize = 'text-[8px]';
+            const padding = 'p-1';
+            const lineClamp = 'line-clamp-2';
 
             return (
               <div
@@ -295,17 +251,18 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
                   transition={{ duration: 0.3, delay: idx * 0.03 }}
                   className={`pointer-events-auto absolute inset-[1px] ${padding} flex flex-col justify-center items-center text-center overflow-hidden rounded-sm`}
                   style={{
-                    backgroundColor: getColorForSubject(
-                      slot.subject,
-                      slot.type,
-                    ),
+                    backgroundColor: getColorForSubject(slot.subject),
                   }}
                 >
-                  <div className={`text-white ${subjectFontSize} leading-tight px-0.5 ${lineClamp} w-full break-words overflow-hidden`}>
+                  <div
+                    className={`text-white ${subjectFontSize} leading-tight px-0.5 ${lineClamp} w-full break-words overflow-hidden`}
+                  >
                     {slot.subject}
                   </div>
                   {slot.room && (
-                    <div className={`text-white/90 ${roomFontSize} mt-0.5 line-clamp-1 w-full break-words overflow-hidden`}>
+                    <div
+                      className={`text-white/90 ${roomFontSize} mt-0.5 line-clamp-1 w-full break-words overflow-hidden`}
+                    >
                       {slot.room}
                     </div>
                   )}
