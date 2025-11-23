@@ -77,8 +77,8 @@ export default function WelcomeScreen({ onStartChat, navigate, user }: WelcomeSc
     },
     {
       icon: Brain,
-      title: 'CSV 간편 업로드',
-      description: 'CSV 파일로 한번에 시간표를 등록하거나 내보낼 수 있어 편리합니다.',
+      title: '이미지 간편 업로드',
+      description: '이미지 파일로 한번에 시간표를 등록하거나 내보낼 수 있어 편리합니다.',
     },
   ];
 
