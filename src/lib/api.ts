@@ -80,7 +80,6 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
 		return JSON.parse(text) as T;
 	} catch (parseError) {
 		// JSON 파싱 실패 시 (예: HTML 에러 페이지 등)
-		// 빈 응답으로 처리하거나 원본 텍스트를 포함한 에러를 던질 수도 있음
 		console.warn('Failed to parse JSON response:', parseError);
 		return undefined as T;
 	}
@@ -278,13 +277,17 @@ export async function getMyTimetables(userId: number) {
 	return request<TimetableResponse[]>(`/timetables/me?${qs.toString()}`, { method: 'GET' });
 }
 
+// ✅ 백엔드 TimetableImageImportResponse.Item 형태에 맞게 수정
 export interface TimetableImageItem {
-	courseName: string;
-	courseCode: string | null;
-	dayOfWeek: string;
-	startPeriod: number;
-	endPeriod: number;
-	room: string | null;
+	courseId: number;             // 실제 Course PK
+	courseName: string;           // 강의명
+	courseCode: string | null;    // 학수번호 (있으면)
+	dayOfWeek: string;            // 요일
+	startPeriod: number;          // 시작 교시
+	endPeriod: number;            // 끝 교시
+	room: string | null;          // 강의실
+	category: string;             // 전필/교양/기타
+	credit: number;               // 학점
 }
 
 export interface TimetableImageResponse {
@@ -300,7 +303,7 @@ export interface UploadResponse {
 			startPeriod: number;
 			endPeriod: number;
 			courseName: string;
-			courseId: string | number;
+			courseId: number;   // ✅ 이제 항상 number (DB Course.id)
 			room?: string;
 			credits?: number;
 		}>;
@@ -331,31 +334,17 @@ export async function uploadTimetableImage(file: File): Promise<UploadResponse> 
 
 		const data: TimetableImageResponse = await res.json();
 
-		// API 응답 형식을 기존 형식으로 변환
-		const courses = data.items.map((item) => {
-			// 교시 범위로 category 추정
-			// 21-26: 전공, 1-9: 교양, 그 외: 교시 범위에 따라 판단
-			let category = '교양';
-			if (item.startPeriod >= 21 && item.startPeriod <= 26) {
-				category = '전필';
-			} else if (item.courseCode) {
-				// courseCode가 있으면 코드로 판단
-				if (item.courseCode.startsWith('CS') || item.courseCode.startsWith('CE')) {
-					category = '전필';
-				}
-			}
-			
-			return {
-				category,
-				dayOfWeek: item.dayOfWeek as 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI',
-				startPeriod: item.startPeriod,
-				endPeriod: item.endPeriod,
-				courseName: item.courseName,
-				courseId: item.courseCode || item.courseName, // courseCode가 null이면 courseName 사용
-				room: item.room || '',
-				credits: 3, // 기본값, 실제로는 백엔드에서 제공해야 함
-			};
-		});
+		// ✅ 백엔드에서 이미 courseId / category / credit 채워주니까 그대로 사용
+		const courses = data.items.map((item) => ({
+			category: item.category || '기타',
+			dayOfWeek: item.dayOfWeek as 'MON' | 'TUE' | 'TUE' | 'WED' | 'THU' | 'FRI',
+			startPeriod: item.startPeriod,
+			endPeriod: item.endPeriod,
+			courseName: item.courseName,
+			courseId: item.courseId,           // ← 진짜 DB Course.id
+			room: item.room || '',
+			credits: item.credit ?? 3,         // 없으면 기본 3
+		}));
 
 		return {
 			success: true,
@@ -519,5 +508,3 @@ export async function deleteAIGeneratedTimetable(_id: string) {
 	await new Promise((r) => setTimeout(r, 200));
 	return { success: true };
 }
-
-
