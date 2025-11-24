@@ -45,7 +45,7 @@ export default function WelcomeScreen({ onStartChat, navigate, user }: WelcomeSc
 
   const quickActions = [
     { icon: Sparkles, label: '2학년 컴퓨터공학과 시간표 생성', description: '전공과 교양 균형있게' },
-    { icon: Calendar, label: '공강 화요일로 시간표 만들어줘', description: '원하는 요일 설정' },
+    { icon: Calendar, label: '전자컴퓨터공학과 2학년 시간표 생성', description: '원하는 요일 설정' },
     { icon: GraduationCap, label: '컴퓨터 공학과 22학번 졸업요건', description: '시간대 맞춤 추천' },
   ];
 
