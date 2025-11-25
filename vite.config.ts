@@ -76,7 +76,7 @@
       open: true,
       proxy: {
         '/api': {
-          target: 'https://unitime-be.onrender.com',
+          target: 'https://unitime-be-4jyj.onrender.com',
           changeOrigin: true,
           secure: true,
         },
