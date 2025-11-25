@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, User, ArrowLeft, Users } from 'lucide-react';
+import { Save, User, ArrowLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import ChatPanel from './ChatPanel';
 import TimetablePanel from './TimetablePanel';
@@ -32,6 +32,8 @@ interface Message {
   timestamp: Date;
   animate?: boolean;
 }
+
+type PlanKey = 'A' | 'B' | 'C';
 
 interface ChatbotScreenProps {
   user: UserType | null;
@@ -74,7 +76,21 @@ export default function ChatbotScreen({
     useState<string>('');
   const processedInitialMessageRef = useRef<string | null>(null);
 
-  // Load user id for chat
+  // ✅ 현재 작업 중인 AI 플랜 (A/B/C)
+  const [planKey, setPlanKey] = useState<PlanKey>('A');
+
+  // 세션에서 플랜 키 읽어오기
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = sessionStorage.getItem('aiPlanTarget');
+    if (stored === 'A' || stored === 'B' || stored === 'C') {
+      setPlanKey(stored);
+    } else {
+      setPlanKey('A');
+    }
+  }, []);
+
+  // 내 프로필 userId
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -91,7 +107,7 @@ export default function ChatbotScreen({
     };
   }, []);
 
-  // Load chat history when opening chat
+  // 채팅 히스토리 로딩
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -117,9 +133,8 @@ export default function ChatbotScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myUserId]);
 
-  // Handle initial message from welcome screen
+  // welcome 화면에서 넘겨준 initialMessage 처리
   useEffect(() => {
-    // 이미 처리된 initialMessage는 다시 처리하지 않음
     if (
       !initialMessage ||
       !myUserId ||
@@ -128,14 +143,11 @@ export default function ChatbotScreen({
       return;
     }
 
-    // 이 메시지를 처리 중임을 표시
     processedInitialMessageRef.current = initialMessage;
-
     let mounted = true;
-    // history를 먼저 로드하고, 그 다음에 initialMessage를 처리
+
     (async () => {
       try {
-        // 기존 history 로드
         const history = await getChatHistory(myUserId);
         if (!mounted) return;
         const mapped: Message[] = history.map((h) => ({
@@ -147,12 +159,10 @@ export default function ChatbotScreen({
         }));
         setMessages(mapped);
 
-        // initialMessage가 이미 history에 있는지 확인 (중복 방지)
         const alreadyExists = mapped.some(
           (m) => m.sender === 'user' && m.text === initialMessage,
         );
         if (alreadyExists) {
-          // 이미 history에 있으면 버튼 가시성만 체크
           const recentUserMessages = mapped
             .filter((m) => m.sender === 'user')
             .slice(-5)
@@ -169,16 +179,14 @@ export default function ChatbotScreen({
               setCanModify(false);
             }
           } catch {
-            // 실패 시 기존 상태 유지
+            //
           }
-          // initialMessage 처리 완료 후 초기화 (이미 history에 있으므로 재전송하지 않음)
           if (mounted && onInitialMessageProcessed) {
             onInitialMessageProcessed();
           }
           return;
         }
 
-        // initialMessage 전송
         const userMessage: Message = {
           id: Date.now().toString(),
           text: initialMessage,
@@ -204,7 +212,6 @@ export default function ChatbotScreen({
         };
         setMessages((prev) => [...prev, aiMessage]);
 
-        // 버튼 가시성 판단
         const recentUserMessages = [...mapped, userMessage]
           .filter((m) => m.sender === 'user')
           .slice(-5)
@@ -221,10 +228,9 @@ export default function ChatbotScreen({
             setCanModify(false);
           }
         } catch {
-          // 실패 시 기존 상태 유지
+          //
         }
 
-        // history 다시 로드하여 서버에 기록된 내용 반영
         try {
           const updatedHistory = await getChatHistory(uid);
           if (!mounted) return;
@@ -237,16 +243,15 @@ export default function ChatbotScreen({
           }));
           setMessages(updatedMapped);
         } catch {
-          // history 재로드 실패 시 현재 메시지 유지
+          //
         }
 
-        // initialMessage 처리 완료 후 초기화
         if (mounted && onInitialMessageProcessed) {
           onInitialMessageProcessed();
         }
       } catch {
         if (!mounted) return;
-        // history 로드 실패 시에도 initialMessage는 전송 시도
+
         const userMessage: Message = {
           id: Date.now().toString(),
           text: initialMessage,
@@ -274,7 +279,6 @@ export default function ChatbotScreen({
           };
           setMessages((prev) => [...prev, aiMessage]);
 
-          // 버튼 가시성 판단
           try {
             const vis = await getAIGenerateButtonVisibility({
               userId: uid,
@@ -287,7 +291,7 @@ export default function ChatbotScreen({
               setCanModify(false);
             }
           } catch {
-            // 실패 시 기존 상태 유지
+            //
           }
         } catch {
           if (!mounted) return;
@@ -302,7 +306,6 @@ export default function ChatbotScreen({
         } finally {
           if (mounted) {
             setIsChatLoading(false);
-            // initialMessage 처리 완료 후 초기화
             if (onInitialMessageProcessed) {
               onInitialMessageProcessed();
             }
@@ -329,7 +332,6 @@ export default function ChatbotScreen({
       animate: false,
     };
 
-    // optimistic: add only user message
     setMessages((prev) => [...prev, userMessage]);
     setIsChatLoading(true);
 
@@ -345,7 +347,6 @@ export default function ChatbotScreen({
       };
       setMessages((prev) => [...prev, aiMessage]);
 
-      // 버튼 가시성 판단
       const recentUserMessages = [...messages, userMessage]
         .filter((m) => m.sender === 'user')
         .slice(-5)
@@ -360,7 +361,7 @@ export default function ChatbotScreen({
         setGenerateSuggestion(vis.suggestionText || '');
         setCanModify(timetable.length > 0 ? !!vis.visible : false);
       } catch {
-        // 실패 시 기존 상태 유지
+        //
       }
     } catch {
       const aiMessage: Message = {
@@ -376,49 +377,13 @@ export default function ChatbotScreen({
     }
   };
 
-  const generateAIResponse = (userInput: string, messageCount: number) => {
-    const responses = [
-      '좋아요! 어떤 과목을 선호하시나요? (예: 전공필수, 전공선택, 교양)',
-      '시간대 선호도가 있으신가요? (예: 오전 수업, 오후 수업, 공강 요일)',
-      '네, 이해했습니다! 위의 "시간표 생성" 버튼을 눌러주시면 맞춤 시간표를 만들어드리겠습니다.',
-      '알겠습니다. 다른 요청사항이 있으시면 말씀해주세요!',
-    ];
-
-    // 시간표가 이미 있고 수정 관련 키워드가 있는 경우
-    if (timetable.length > 0) {
-      const modifyKeywords = [
-        '수정',
-        '변경',
-        '바꿔',
-        '교체',
-        '빼고',
-        '추가',
-        '삭제',
-        '조정',
-        '다시',
-      ];
-      const hasModifyKeyword = modifyKeywords.some((keyword) =>
-        userInput.includes(keyword),
-      );
-
-      if (hasModifyKeyword) {
-        return '네, 요청사항을 확인했습니다. 오른쪽의 "대화 기반 수정" 버튼을 눌러주시면 시간표를 업데이트하겠습니다.';
-      }
-    }
-
-    return responses[Math.min(messageCount, responses.length - 1)];
-  };
-
   const handleGenerateTimetable = async () => {
-    console.log('handleGenerateTimetable 호출됨, canGenerate:', canGenerate);
     if (!canGenerate) {
       toast.error('아직 시간표 생성 조건이 충족되지 않았어요.');
       return;
     }
     const uid = myUserId ?? (await getMyProfile()).userId;
-    console.log('시간표 생성 시작, userId:', uid);
 
-    // 올해/학기 간단 추론
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
@@ -426,36 +391,22 @@ export default function ChatbotScreen({
 
     setIsTimetableGenerating(true);
     try {
-      // ✅ 최근 유저 메시지 기반으로 message 생성 (summary API 제거)
       const userMessages = messages.filter((m) => m.sender === 'user');
       if (userMessages.length === 0) {
-        toast.error(
-          '시간표를 생성할 대화 내용이 없습니다. 먼저 원하는 조건을 말해 주세요.',
-        );
+        toast.error('시간표를 생성할 대화 내용이 없습니다. 먼저 원하는 조건을 말해 주세요.');
         return;
       }
 
       const recentUserMessages = userMessages.slice(-10).map((m) => m.text);
       const message = recentUserMessages.join('\n');
 
-      console.log(
-        '시간표 생성 API 호출 시작, message:',
-        message,
-        'year:',
-        year,
-        'semester:',
-        semester,
-      );
-
       const res = await generateAITimetable({
         userId: uid,
         message,
         year,
         semester,
+        planKey, // 🔥 플랜 정보 전달
       });
-
-      console.log('AI 시간표 API 응답:', res);
-      console.log('API 응답 items:', res.items);
 
       const apiItems: ApiCourseItem[] = res.items.map(
         (item: any, index: number) => ({
@@ -481,23 +432,18 @@ export default function ChatbotScreen({
       );
 
       const slots = convertApiItemsToTimeSlots(apiItems);
-      console.log('변환된 시간표 슬롯:', slots);
       setTimetable(slots);
       setCanModify(false);
       setCurrentTimetableId(res.id);
       setCurrentTimetableTitle(
-        res.title || '시간표가 생성되었습니다!',
+        res.title || `플랜 ${planKey} 시간표가 생성되었습니다!`,
       );
 
       const { majorCredits, generalCredits, totalCredits } =
         calculateCredits(slots);
-      console.log('전공/교양 학점 계산:', {
-        majorCredits,
-        generalCredits,
-        totalCredits,
-      });
+      console.log('credits:', { majorCredits, generalCredits, totalCredits });
 
-      toast.success(res.title || '시간표가 생성되었습니다!');
+      toast.success(res.title || `플랜 ${planKey} 시간표가 생성되었습니다!`);
     } catch (e: any) {
       toast.error(e?.message || '시간표 생성에 실패했습니다.');
     } finally {
@@ -520,9 +466,7 @@ export default function ChatbotScreen({
     }
 
     const uid = myUserId ?? (await getMyProfile()).userId;
-    console.log('시간표 수정 시작, userId:', uid);
 
-    // 올해/학기 간단 추론
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
@@ -530,7 +474,6 @@ export default function ChatbotScreen({
 
     setIsTimetableGenerating(true);
     try {
-      // ✅ 최근 유저 메시지 기반으로 message 생성 (summary API 제거)
       const userMessages = messages.filter((m) => m.sender === 'user');
       if (userMessages.length === 0) {
         toast.error('시간표를 수정할 대화 내용이 없습니다.');
@@ -540,24 +483,13 @@ export default function ChatbotScreen({
       const recentUserMessages = userMessages.slice(-10).map((m) => m.text);
       const message = recentUserMessages.join('\n');
 
-      console.log(
-        '시간표 수정 API 호출 시작, message:',
-        message,
-        'year:',
-        year,
-        'semester:',
-        semester,
-      );
-
       const res = await generateAITimetable({
         userId: uid,
         message,
         year,
         semester,
+        planKey, // 🔥 플랜 정보 전달
       });
-
-      console.log('AI 시간표 수정 API 응답:', res);
-      console.log('API 응답 items:', res.items);
 
       const apiItems: ApiCourseItem[] = res.items.map(
         (item: any, index: number) => ({
@@ -583,23 +515,22 @@ export default function ChatbotScreen({
       );
 
       const slots = convertApiItemsToTimeSlots(apiItems);
-      console.log('변환된 시간표 슬롯 (수정):', slots);
       setTimetable(slots);
       setCanModify(false);
       setCurrentTimetableId(res.id);
       setCurrentTimetableTitle(
-        res.title || '시간표가 수정되었습니다!',
+        res.title || `플랜 ${planKey} 시간표가 수정되었습니다!`,
       );
 
       const { majorCredits, generalCredits, totalCredits } =
         calculateCredits(slots);
-      console.log('전공/교양 학점 계산 (수정):', {
+      console.log('credits(modify):', {
         majorCredits,
         generalCredits,
         totalCredits,
       });
 
-      toast.success(res.title || '시간표가 수정되었습니다!');
+      toast.success(res.title || `플랜 ${planKey} 시간표가 수정되었습니다!`);
     } catch (e: any) {
       toast.error(e?.message || '시간표 수정에 실패했습니다.');
     } finally {
@@ -618,17 +549,13 @@ export default function ChatbotScreen({
       setCanGenerate(false);
       setGenerateSuggestion('');
       setCanModify(false);
-      // initialMessage 처리 상태도 초기화
       processedInitialMessageRef.current = null;
-      // initialMessage도 초기화하여 재사용 방지
       if (onInitialMessageProcessed) {
         onInitialMessageProcessed();
       }
       toast.success('대화가 초기화되었습니다.');
-    } catch (e: any) {
-      toast.error(
-        '대화 초기화에 실패했습니다. 잠시 후 다시 시도해 주세요.',
-      );
+    } catch {
+      toast.error('대화 초기화에 실패했습니다. 잠시 후 다시 시도해 주세요.');
     }
   };
 
@@ -644,15 +571,12 @@ export default function ChatbotScreen({
     }
 
     if (!currentTimetableId) {
-      toast.error(
-        '시간표 ID를 찾을 수 없습니다. 시간표를 다시 생성해주세요.',
-      );
+      toast.error('시간표 ID를 찾을 수 없습니다. 시간표를 다시 생성해주세요.');
       return;
     }
 
     const uid = myUserId ?? (await getMyProfile()).userId;
 
-    // 사용자의 마지막 메시지를 resultSummary로 사용
     const lastUserMsg =
       [...messages].reverse().find((m) => m.sender === 'user')?.text || '';
     const resultSummary = lastUserMsg || 'AI가 생성한 맞춤 시간표입니다.';
@@ -662,8 +586,9 @@ export default function ChatbotScreen({
         userId: uid,
         timetableId: currentTimetableId,
         resultSummary,
+        planKey, // 🔥 어떤 플랜에 저장할지 전달
       });
-      toast.success('시간표가 저장되었습니다!');
+      toast.success(`플랜 ${planKey} 시간표가 저장되었습니다!`);
     } catch (e: any) {
       toast.error(e?.message || '시간표 저장에 실패했습니다.');
     }
@@ -688,13 +613,13 @@ export default function ChatbotScreen({
 
   return (
     <div className="h-screen flex flex-col relative bg-[#020103]">
-      {/* Decorative Background */}
+      {/* 배경 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[128px]" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[128px]" />
       </div>
 
-      {/* Header */}
+      {/* 헤더 */}
       <header className="relative backdrop-blur-md bg-black/40 border-b border-white/10 px-6 py-4 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
           <Button
@@ -733,9 +658,9 @@ export default function ChatbotScreen({
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* 메인 */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Chat Panel */}
+        {/* 왼쪽: 채팅 */}
         <div className="w-2/5">
           <ChatPanel
             messages={messages}
@@ -746,7 +671,7 @@ export default function ChatbotScreen({
           />
         </div>
 
-        {/* Timetable Panel */}
+        {/* 오른쪽: 시간표 */}
         <TimetablePanel
           timetable={timetable}
           onGenerateTimetable={handleGenerateTimetable}
@@ -757,7 +682,7 @@ export default function ChatbotScreen({
         />
       </div>
 
-      {/* Login Modal */}
+      {/* 로그인 모달 */}
       {showLoginModal && (
         <LoginModal
           onClose={() => setShowLoginModal(false)}
@@ -768,7 +693,7 @@ export default function ChatbotScreen({
         />
       )}
 
-      {/* Purchase Modal */}
+      {/* 결제 모달 */}
       {showPurchaseModal && (
         <PurchaseModal
           onClose={() => setShowPurchaseModal(false)}
@@ -776,7 +701,7 @@ export default function ChatbotScreen({
         />
       )}
 
-      {/* Ad Banner for Free Users */}
+      {/* 광고 */}
       {(!user || user.plan !== 'premium') && showAd && (
         <div className="relative z-20">
           <AdBanner position="bottom" onClose={() => setShowAd(false)} />
