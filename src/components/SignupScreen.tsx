@@ -240,14 +240,21 @@ export default function SignupScreen({ navigate, setUser }: SignupScreenProps) {
                 <Building className="size-4" />
                 학과 <span className="text-red-400">*</span>
               </Label>
-              <Input
-                id="department"
-                placeholder="컴퓨터공학과"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                disabled={isLoading}
-                className="rounded-lg bg-white/5 border-white/15 text-white placeholder:text-white/40 focus:border-purple-500/50 focus:ring-purple-500/20 disabled:opacity-50"
-              />
+              <Select value={department} onValueChange={setDepartment} disabled={isLoading}>
+                <SelectTrigger className="rounded-lg bg-white/5 border-white/15 text-white focus:border-purple-500/50 focus:ring-purple-500/20 disabled:opacity-50">
+                  <SelectValue placeholder="학과를 선택하세요" />
+                </SelectTrigger>
+                <SelectContent className="bg-black/90 backdrop-blur-xl border-white/15">
+                  <SelectItem value="컴퓨터공학과" className="text-white focus:bg-white/10">컴퓨터공학과</SelectItem>
+                  <SelectItem value="소프트웨어학과" className="text-white focus:bg-white/10">소프트웨어학과</SelectItem>
+                  <SelectItem value="전자공학과" className="text-white focus:bg-white/10">전자공학과</SelectItem>
+                  <SelectItem value="전자컴퓨터공학과" className="text-white focus:bg-white/10">전자컴퓨터공학과</SelectItem>
+                  <SelectItem value="경영학과" className="text-white focus:bg-white/10">경영학과</SelectItem>
+                  <SelectItem value="경제학과" className="text-white focus:bg-white/10">경제학과</SelectItem>
+                  <SelectItem value="국어국문학과" className="text-white focus:bg-white/10">국어국문학과</SelectItem>
+                  <SelectItem value="영어영문학과" className="text-white focus:bg-white/10">영어영문학과</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2">

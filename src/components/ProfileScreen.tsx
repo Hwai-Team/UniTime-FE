@@ -372,8 +372,20 @@ export default function ProfileScreen({ user, setUser, navigate, onEditTimetable
           <Card className="p-6 mb-6 bg-gradient-to-br from-purple-600/40 to-blue-600/40 backdrop-blur-xl border-white/20 shadow-[0_0_40px_rgba(140,69,255,0.4)]">
             <div className="flex items-start justify-between">
               <div className="flex gap-4">
-                <div className="size-20 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
-                  <span className="text-3xl">👨‍🎓</span>
+                <div className="size-20 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm overflow-hidden">
+                  <img 
+                    src="/default-profile.png" 
+                    alt="프로필" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // 이미지 로드 실패 시 이모지로 대체
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      if (target.parentElement) {
+                        target.parentElement.innerHTML = '<span class="text-3xl">👨‍🎓</span>';
+                      }
+                    }}
+                  />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-2">

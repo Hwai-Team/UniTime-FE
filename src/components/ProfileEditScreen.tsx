@@ -84,8 +84,20 @@ export default function ProfileEditScreen({ user, setUser, navigate }: ProfileEd
             <div className="space-y-6">
               {/* Avatar */}
               <div className="flex justify-center">
-                <div className="size-24 bg-gradient-to-br from-purple-600/40 to-blue-600/40 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20">
-                  <span className="text-5xl">👨‍🎓</span>
+                <div className="size-24 bg-gradient-to-br from-purple-600/40 to-blue-600/40 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/20 overflow-hidden">
+                  <img 
+                    src="/default-profile.png" 
+                    alt="프로필" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // 이미지 로드 실패 시 이모지로 대체
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      if (target.parentElement) {
+                        target.parentElement.innerHTML = '<span class="text-5xl">👨‍🎓</span>';
+                      }
+                    }}
+                  />
                 </div>
               </div>
 
@@ -127,6 +139,7 @@ export default function ProfileEditScreen({ user, setUser, navigate }: ProfileEd
                     <SelectItem value="컴퓨터공학과">컴퓨터공학과</SelectItem>
                     <SelectItem value="소프트웨어학과">소프트웨어학과</SelectItem>
                     <SelectItem value="전자공학과">전자공학과</SelectItem>
+                    <SelectItem value="전자컴퓨터공학과">전자컴퓨터공학과</SelectItem>
                     <SelectItem value="경영학과">경영학과</SelectItem>
                     <SelectItem value="경제학과">경제학과</SelectItem>
                     <SelectItem value="국어국문학과">국어국문학과</SelectItem>

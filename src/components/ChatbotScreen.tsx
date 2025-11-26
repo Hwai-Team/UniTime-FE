@@ -75,6 +75,7 @@ export default function ChatbotScreen({
   const [currentTimetableTitle, setCurrentTimetableTitle] =
     useState<string>('');
   const processedInitialMessageRef = useRef<string | null>(null);
+  const [profileImageError, setProfileImageError] = useState(false);
 
   // ✅ 현재 작업 중인 AI 플랜 (A/B/C)
   const [planKey, setPlanKey] = useState<PlanKey>('A');
@@ -408,7 +409,13 @@ export default function ChatbotScreen({
         planKey, // 🔥 플랜 정보 전달
       });
 
-      const apiItems: ApiCourseItem[] = res.items.map(
+      // Ensure only MON-FRI are accepted, filter out other days
+      const filteredItems = res.items.filter(
+        (item: any) =>
+          ['MON', 'TUE', 'WED', 'THU', 'FRI'].includes(item.dayOfWeek)
+      );
+
+      const apiItems: ApiCourseItem[] = filteredItems.map(
         (item: any, index: number) => ({
           id: item.id ?? index + 1,
           courseId: item.courseId ?? index + 1,
@@ -651,9 +658,18 @@ export default function ChatbotScreen({
             variant="ghost"
             size="icon"
             onClick={handleProfileClick}
-            className="rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/15"
+            className="rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/15 p-0 overflow-hidden"
           >
-            <User className="size-5" />
+            {!profileImageError ? (
+              <img 
+                src="/default-profile.png" 
+                alt="프로필" 
+                className="w-full h-full object-cover"
+                onError={() => setProfileImageError(true)}
+              />
+            ) : (
+              <User className="size-5" />
+            )}
           </Button>
         </div>
       </header>
