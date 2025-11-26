@@ -28,15 +28,15 @@ interface MergedSlot {
 // 요일
 const DAYS = ['월', '화', '수', '목', '금'];
 
-// 시간 축 (왼쪽 라벨 10시~18시)
-const START_HOUR = 10;
+// 시간 축 (왼쪽 라벨 9시~18시)
+const START_HOUR = 9;
 const END_HOUR = 19; // 18~19가 마지막 구간
-const HOUR_SPAN = END_HOUR - START_HOUR; // 9칸
+const HOUR_SPAN = END_HOUR - START_HOUR; // 10칸
 
 // 교시 순서
 const PERIOD_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9, 21, 22, 23, 24, 25, 26];
 
-// 교시별 실제 시간(소수 시간 단위) - +1 시간 적용
+// 교시별 실제 시간(소수 시간 단위) - 9시 시작
 const PERIOD_TIME: Record<
   number,
   {
@@ -44,23 +44,23 @@ const PERIOD_TIME: Record<
     end: number;   // 예: 10.833 (10:50)
   }
 > = {
-  1: { start: 10.0, end: 10.0 + 50 / 60 },   // 10:00 ~ 10:50
-  2: { start: 11.0, end: 11.0 + 50 / 60 }, // 11:00 ~ 11:50
-  3: { start: 12.0, end: 12.0 + 50 / 60 }, // 12:00 ~ 12:50
-  4: { start: 13.0, end: 13.0 + 50 / 60 }, // 13:00 ~ 13:50
-  5: { start: 14.0, end: 14.0 + 50 / 60 }, // 14:00 ~ 14:50
-  6: { start: 15.0, end: 15.0 + 50 / 60 }, // 15:00 ~ 15:50
-  7: { start: 16.0, end: 16.0 + 50 / 60 }, // 16:00 ~ 16:50
-  8: { start: 17.0, end: 17.0 + 50 / 60 }, // 17:00 ~ 17:50
-  9: { start: 18.0, end: 18.0 + 50 / 60 }, // 18:00 ~ 18:50
+  1: { start: 9.0, end: 9.0 + 50 / 60 },   // 09:00 ~ 09:50
+  2: { start: 10.0, end: 10.0 + 50 / 60 }, // 10:00 ~ 10:50
+  3: { start: 11.0, end: 11.0 + 50 / 60 }, // 11:00 ~ 11:50
+  4: { start: 12.0, end: 12.0 + 50 / 60 }, // 12:00 ~ 12:50
+  5: { start: 13.0, end: 13.0 + 50 / 60 }, // 13:00 ~ 13:50
+  6: { start: 14.0, end: 14.0 + 50 / 60 }, // 14:00 ~ 14:50
+  7: { start: 15.0, end: 15.0 + 50 / 60 }, // 15:00 ~ 15:50
+  8: { start: 16.0, end: 16.0 + 50 / 60 }, // 16:00 ~ 16:50
+  9: { start: 17.0, end: 17.0 + 50 / 60 }, // 17:00 ~ 17:50
 
   // 75분 수업
-  21: { start: 10.0, end: 11.25 },  // 10:00 ~ 11:15
-  22: { start: 11.5, end: 12.75 }, // 11:30 ~ 12:45
-  23: { start: 13.0, end: 14.25 }, // 13:00 ~ 14:15
-  24: { start: 14.5, end: 15.75 }, // 14:30 ~ 15:45
-  25: { start: 16.0, end: 17.25 }, // 16:00 ~ 17:15
-  26: { start: 17.5, end: 18.75 }, // 17:30 ~ 18:45
+  21: { start: 9.0, end: 10.25 },   // 09:00 ~ 10:15
+  22: { start: 10.5, end: 11.75 }, // 10:30 ~ 11:45
+  23: { start: 12.0, end: 13.25 }, // 12:00 ~ 13:15
+  24: { start: 13.5, end: 14.75 }, // 13:30 ~ 14:45
+  25: { start: 15.0, end: 16.25 }, // 15:00 ~ 16:15
+  26: { start: 16.5, end: 17.75 }, // 16:30 ~ 17:45
 };
 
 // 전공/교양 구분 없이 사용할 고대비 팔레트
@@ -155,7 +155,7 @@ export default function TimetableGrid({ timetable }: TimetableGridProps) {
 
   const mergedSlots = mergeConsecutiveSlots();
 
-  // 10~18시 라벨
+  // 9~18시 라벨
   const hourRows = Array.from({ length: HOUR_SPAN }, (_, i) => START_HOUR + i);
 
   const getHourLabel = (hour: number): string => {
