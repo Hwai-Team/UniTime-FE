@@ -35,32 +35,49 @@ interface SeniorTimetablesScreenProps {
 
 export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScreenProps) {
   const TIME_TO_PERIOD: Record<string, string> = {
-    '09:00': '1',
-    '10:00': '2',
-    '11:00': '3',
-    '12:00': '4',
-    '13:00': '5',
-    '14:00': '6',
-    '15:00': '7',
-    '16:00': '8',
-    '17:00': '9',
-    '10:30': '22',
-    '13:30': '24',
-    '15:30': '25',
-    '16:30': '26',
+    '10:00': '1',
+    '11:00': '2',
+    '12:00': '3',
+    '13:00': '4',
+    '14:00': '5',
+    '15:00': '6',
+    '16:00': '7',
+    '17:00': '8',
+    '18:00': '9',
+    '11:30': '22',
+    '14:30': '24',
+    '16:30': '25',
+    '17:30': '26',
+  };
+
+  // 시간을 +1 시간 늘리는 함수
+  const addOneHour = (time: string): string => {
+    const [hours, minutes] = time.split(':').map(Number);
+    const newHours = hours + 1;
+    return `${newHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+  // 이름을 "김00" 형식으로 변환하는 함수
+  const formatName = (name: string): string => {
+    if (name.length > 0) {
+      return name[0] + '00';
+    }
+    return name;
   };
 
   const mapSlotsWithPeriod = (slots: TimeSlot[]) =>
-    slots.map((slot) => (slot.period ? slot : { ...slot, period: TIME_TO_PERIOD[slot.time] ?? '1' }));
+    slots.map((slot) => {
+      const newTime = addOneHour(slot.time);
+      return (slot.period ? { ...slot, time: newTime } : { ...slot, time: newTime, period: TIME_TO_PERIOD[newTime] ?? '1' });
+    });
 
-  const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
 
   const seniorTimetables: SeniorTimetable[] = [
     {
       id: 1,
-      name: '김민수',
+      name: '김00',
       studentId: '20220001',
       department: '컴퓨터공학과',
       year: '3학년',
@@ -68,21 +85,33 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
       academicYear: '2024',
       gpa: 4.12,
       slots: [
-        { day: '월', time: '09:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
-        { day: '월', time: '11:00', subject: '휴먼컴퓨터인터랙션', room: 'IT-402', credits: 3, type: 'major' },
-        { day: '월', time: '15:00', subject: '캠퍼스라이팅', room: '본-205', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '월', time: '10:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
+        { day: '월', time: '11:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
+        { day: '월', time: '13:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
+        { day: '월', time: '14:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
+        // 2시간 수업
         { day: '화', time: '10:00', subject: '알고리즘분석', room: 'IT-302', credits: 3, type: 'major' },
-        { day: '화', time: '13:00', subject: '캡스톤프로젝트 I', room: 'IT-508', credits: 2, type: 'major' },
-        { day: '수', time: '09:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
-        { day: '수', time: '12:00', subject: '컴퓨터비전', room: 'IT-506', credits: 3, type: 'major' },
+        { day: '화', time: '11:00', subject: '알고리즘분석', room: 'IT-302', credits: 3, type: 'major' },
+        { day: '화', time: '13:00', subject: '캡스톤프로젝트', room: 'IT-508', credits: 2, type: 'major' },
+        { day: '화', time: '14:00', subject: '캡스톤프로젝트', room: 'IT-508', credits: 2, type: 'major' },
+        { day: '화', time: '15:00', subject: '캡스톤프로젝트', room: 'IT-508', credits: 2, type: 'major' },
+        { day: '화', time: '16:00', subject: '캡스톤프로젝트', room: 'IT-508', credits: 2, type: 'major' },
+        // 2시간 수업
+        { day: '수', time: '10:00', subject: '컴퓨터비전', room: 'IT-506', credits: 3, type: 'major' },
+        { day: '수', time: '11:00', subject: '컴퓨터비전', room: 'IT-506', credits: 3, type: 'major' },
+        { day: '수', time: '13:00', subject: '컴퓨터비전', room: 'IT-506', credits: 3, type: 'major' },
+        { day: '수', time: '14:00', subject: '컴퓨터비전', room: 'IT-506', credits: 3, type: 'major' },
+        // 2시간 수업
         { day: '목', time: '10:00', subject: '인공지능실습', room: 'IT-503', credits: 3, type: 'major' },
-        { day: '목', time: '15:00', subject: '산학협력프로젝트', room: 'IT-509', credits: 2, type: 'major' },
-        { day: '금', time: '11:00', subject: '비즈니스커뮤니케이션', room: '본-105', credits: 2, type: 'general' },
+        { day: '목', time: '11:00', subject: '인공지능실습', room: 'IT-503', credits: 3, type: 'major' },
+        { day: '목', time: '13:00', subject: '비즈니스커뮤니케이션', room: '본-105', credits: 2, type: 'general' },
+        { day: '목', time: '14:00', subject: '비즈니스커뮤니케이션', room: '본-105', credits: 2, type: 'general' },
       ],
     },
     {
       id: 2,
-      name: '이서연',
+      name: '이00',
       studentId: '20210034',
       department: '컴퓨터공학과',
       year: '4학년',
@@ -90,21 +119,35 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
       academicYear: '2024',
       gpa: 4.35,
       slots: [
+        // 2시간 수업
         { day: '월', time: '10:00', subject: '분산시스템', room: 'IT-601', credits: 3, type: 'major' },
+        { day: '월', time: '11:00', subject: '분산시스템', room: 'IT-601', credits: 3, type: 'major' },
         { day: '월', time: '13:00', subject: '클라우드컴퓨팅', room: 'IT-602', credits: 3, type: 'major' },
-        { day: '월', time: '16:00', subject: '글로벌리더십', room: '국-204', credits: 2, type: 'general' },
-        { day: '화', time: '09:00', subject: '컴퓨터네트워크', room: 'IT-405', credits: 3, type: 'major' },
-        { day: '화', time: '11:00', subject: '데이터마이닝', room: 'IT-407', credits: 3, type: 'major' },
-        { day: '수', time: '10:00', subject: '분산시스템', room: 'IT-601', credits: 3, type: 'major' },
+        { day: '월', time: '14:00', subject: '클라우드컴퓨팅', room: 'IT-602', credits: 3, type: 'major' },
+        { day: '월', time: '15:00', subject: '클라우드컴퓨팅', room: 'IT-602', credits: 3, type: 'major' },
+        { day: '월', time: '16:00', subject: '클라우드컴퓨팅', room: 'IT-602', credits: 3, type: 'major' },
+        // 2시간 수업
+        { day: '화', time: '10:00', subject: '컴퓨터네트워크', room: 'IT-405', credits: 3, type: 'major' },
+        { day: '화', time: '11:00', subject: '컴퓨터네트워크', room: 'IT-405', credits: 3, type: 'major' },
+        { day: '화', time: '13:00', subject: '데이터마이닝', room: 'IT-407', credits: 3, type: 'major' },
+        { day: '화', time: '14:00', subject: '데이터마이닝', room: 'IT-407', credits: 3, type: 'major' },
+        { day: '화', time: '15:00', subject: '데이터마이닝', room: 'IT-407', credits: 3, type: 'major' },
+        { day: '화', time: '16:00', subject: '데이터마이닝', room: 'IT-407', credits: 3, type: 'major' },
+        // 2시간 수업
+        { day: '수', time: '10:00', subject: '딥러닝캡스톤', room: 'IT-610', credits: 3, type: 'major' },
+        { day: '수', time: '11:00', subject: '딥러닝캡스톤', room: 'IT-610', credits: 3, type: 'major' },
+        { day: '수', time: '13:00', subject: '딥러닝캡스톤', room: 'IT-610', credits: 3, type: 'major' },
         { day: '수', time: '14:00', subject: '딥러닝캡스톤', room: 'IT-610', credits: 3, type: 'major' },
-        { day: '목', time: '09:00', subject: '컴퓨터네트워크', room: 'IT-405', credits: 3, type: 'major' },
-        { day: '목', time: '12:00', subject: '보안공학', room: 'IT-409', credits: 3, type: 'major' },
-        { day: '금', time: '10:00', subject: '스타트업세미나', room: '창-201', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '목', time: '10:00', subject: '보안공학', room: 'IT-409', credits: 3, type: 'major' },
+        { day: '목', time: '11:00', subject: '보안공학', room: 'IT-409', credits: 3, type: 'major' },
+        { day: '목', time: '13:00', subject: '보안공학', room: 'IT-409', credits: 3, type: 'major' },
+        { day: '목', time: '14:00', subject: '보안공학', room: 'IT-409', credits: 3, type: 'major' },
       ],
     },
     {
       id: 3,
-      name: '박준호',
+      name: '박00',
       studentId: '20230125',
       department: '컴퓨터공학과',
       year: '2학년',
@@ -112,21 +155,28 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
       academicYear: '2024',
       gpa: 3.98,
       slots: [
-        { day: '월', time: '09:00', subject: '자료구조', room: 'IT-301', credits: 3, type: 'major' },
-        { day: '월', time: '13:00', subject: '공학수학 II', room: 'IT-205', credits: 3, type: 'major' },
-        { day: '월', time: '16:00', subject: '현대사회의이해', room: '본-104', credits: 2, type: 'general' },
-        { day: '화', time: '10:00', subject: '파이썬응용', room: 'IT-207', credits: 3, type: 'major' },
-        { day: '화', time: '14:00', subject: '영어토론', room: '어-204', credits: 2, type: 'general' },
-        { day: '수', time: '09:00', subject: '자료구조', room: 'IT-301', credits: 3, type: 'major' },
-        { day: '수', time: '12:00', subject: '디지털논리회로', room: 'IT-210', credits: 3, type: 'major' },
-        { day: '목', time: '10:00', subject: '파이썬응용', room: 'IT-207', credits: 3, type: 'major' },
-        { day: '목', time: '13:00', subject: '웹프런티어', room: 'IT-312', credits: 3, type: 'major' },
-        { day: '금', time: '11:00', subject: '체육과건강', room: '체-102', credits: 1, type: 'general' },
+        // 2시간 수업
+        { day: '화', time: '10:00', subject: '알고리즘및실습', room: 'IT-301', credits: 3, type: 'major' },
+        { day: '화', time: '11:00', subject: '알고리즘및실습', room: 'IT-301', credits: 3, type: 'major' },
+        { day: '화', time: '13:00', subject: '객체지향프로그래밍', room: 'IT-207', credits: 3, type: 'major' },
+        { day: '화', time: '14:00', subject: '객체지향프로그래밍', room: 'IT-207', credits: 3, type: 'major' },
+        { day: '화', time: '15:00', subject: '스쿼시', room: '체-102', credits: 1, type: 'general' },
+        { day: '화', time: '16:00', subject: '스쿼시', room: '체-102', credits: 1, type: 'general' },
+        // 2시간 수업
+        { day: '수', time: '10:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
+        { day: '수', time: '11:00', subject: '운영체제', room: 'IT-401', credits: 3, type: 'major' },
+        { day: '수', time: '13:00', subject: 'World English 2', room: '어-204', credits: 2, type: 'general' },
+        { day: '수', time: '14:00', subject: 'World English 2', room: '어-204', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '목', time: '10:00', subject: 'Communication', room: '본-105', credits: 2, type: 'general' },
+        { day: '목', time: '11:00', subject: 'Communication', room: '본-105', credits: 2, type: 'general' },
+        { day: '목', time: '13:00', subject: '자바어플리케이션', room: 'IT-312', credits: 3, type: 'major' },
+        { day: '목', time: '14:00', subject: '자바어플리케이션', room: 'IT-312', credits: 3, type: 'major' },
       ],
     },
     {
       id: 4,
-      name: '정하은',
+      name: '정00',
       studentId: '20220078',
       department: '경영학과',
       year: '3학년',
@@ -134,21 +184,33 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
       academicYear: '2024',
       gpa: 4.21,
       slots: [
-        { day: '월', time: '09:00', subject: '재무관리', room: '경-201', credits: 3, type: 'major' },
-        { day: '월', time: '11:00', subject: '비즈니스데이터분석', room: '경-305', credits: 3, type: 'major' },
-        { day: '월', time: '15:00', subject: '프레젠테이션실습', room: '경-104', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '월', time: '10:00', subject: '재무관리', room: '경-201', credits: 3, type: 'major' },
+        { day: '월', time: '11:00', subject: '재무관리', room: '경-201', credits: 3, type: 'major' },
+        { day: '월', time: '13:00', subject: '재무관리', room: '경-201', credits: 3, type: 'major' },
+        { day: '월', time: '14:00', subject: '재무관리', room: '경-201', credits: 3, type: 'major' },
+        { day: '월', time: '15:00', subject: '비즈니스데이터분석', room: '경-305', credits: 3, type: 'major' },
+        { day: '월', time: '16:00', subject: '비즈니스데이터분석', room: '경-305', credits: 3, type: 'major' },
+        // 2시간 수업
         { day: '화', time: '10:00', subject: '서비스마케팅', room: '경-204', credits: 3, type: 'major' },
-        { day: '화', time: '13:00', subject: '기업법규', room: '경-102', credits: 2, type: 'general' },
-        { day: '수', time: '09:00', subject: '재무관리', room: '경-201', credits: 3, type: 'major' },
-        { day: '수', time: '12:00', subject: '글로벌경영전략', room: '경-402', credits: 3, type: 'major' },
-        { day: '목', time: '10:00', subject: '서비스마케팅', room: '경-204', credits: 3, type: 'major' },
-        { day: '목', time: '14:00', subject: 'HR Analytics', room: '경-308', credits: 3, type: 'major' },
-        { day: '금', time: '11:00', subject: '경제학특강', room: '경-105', credits: 2, type: 'general' },
+        { day: '화', time: '11:00', subject: '서비스마케팅', room: '경-204', credits: 3, type: 'major' },
+        { day: '화', time: '13:00', subject: '서비스마케팅', room: '경-204', credits: 3, type: 'major' },
+        { day: '화', time: '14:00', subject: '서비스마케팅', room: '경-204', credits: 3, type: 'major' },
+        // 2시간 수업
+        { day: '수', time: '10:00', subject: '글로벌경영전략', room: '경-402', credits: 3, type: 'major' },
+        { day: '수', time: '11:00', subject: '글로벌경영전략', room: '경-402', credits: 3, type: 'major' },
+        { day: '수', time: '13:00', subject: '기업법규', room: '경-102', credits: 2, type: 'general' },
+        { day: '수', time: '14:00', subject: '기업법규', room: '경-102', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '목', time: '10:00', subject: 'HR Analytics', room: '경-308', credits: 3, type: 'major' },
+        { day: '목', time: '11:00', subject: 'HR Analytics', room: '경-308', credits: 3, type: 'major' },
+        { day: '목', time: '13:00', subject: '프레젠테이션실습', room: '경-104', credits: 2, type: 'general' },
+        { day: '목', time: '14:00', subject: '프레젠테이션실습', room: '경-104', credits: 2, type: 'general' },
       ],
     },
     {
       id: 5,
-      name: '최윤아',
+      name: '최00',
       studentId: '20230089',
       department: '경영학과',
       year: '2학년',
@@ -156,21 +218,33 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
       academicYear: '2024',
       gpa: 3.92,
       slots: [
+        // 2시간 수업
         { day: '월', time: '10:00', subject: '경영정보시스템', room: '경-203', credits: 3, type: 'major' },
+        { day: '월', time: '11:00', subject: '경영정보시스템', room: '경-203', credits: 3, type: 'major' },
         { day: '월', time: '13:00', subject: '회계원리', room: '경-101', credits: 3, type: 'major' },
-        { day: '월', time: '16:00', subject: '스토리텔링워크숍', room: '본-301', credits: 2, type: 'general' },
-        { day: '화', time: '09:00', subject: '고객경험디자인', room: '경-205', credits: 3, type: 'major' },
-        { day: '화', time: '14:00', subject: '비즈니스영어', room: '어-201', credits: 2, type: 'general' },
-        { day: '수', time: '10:00', subject: '경영정보시스템', room: '경-203', credits: 3, type: 'major' },
-        { day: '수', time: '12:00', subject: '조직행동론', room: '경-207', credits: 3, type: 'major' },
-        { day: '목', time: '09:00', subject: '고객경험디자인', room: '경-205', credits: 3, type: 'major' },
-        { day: '목', time: '15:00', subject: '데이터시각화', room: '경-210', credits: 3, type: 'major' },
-        { day: '금', time: '11:00', subject: '자기주도캠프', room: '학-101', credits: 1, type: 'general' },
+        { day: '월', time: '14:00', subject: '회계원리', room: '경-101', credits: 3, type: 'major' },
+        { day: '월', time: '15:00', subject: '회계원리', room: '경-101', credits: 3, type: 'major' },
+        { day: '월', time: '16:00', subject: '회계원리', room: '경-101', credits: 3, type: 'major' },
+        // 2시간 수업
+        { day: '화', time: '10:00', subject: '고객경험디자인', room: '경-205', credits: 3, type: 'major' },
+        { day: '화', time: '11:00', subject: '고객경험디자인', room: '경-205', credits: 3, type: 'major' },
+        { day: '화', time: '13:00', subject: '고객경험디자인', room: '경-205', credits: 3, type: 'major' },
+        { day: '화', time: '14:00', subject: '고객경험디자인', room: '경-205', credits: 3, type: 'major' },
+        // 2시간 수업
+        { day: '수', time: '10:00', subject: '조직행동론', room: '경-207', credits: 3, type: 'major' },
+        { day: '수', time: '11:00', subject: '조직행동론', room: '경-207', credits: 3, type: 'major' },
+        { day: '수', time: '13:00', subject: '스토리텔링워크숍', room: '본-301', credits: 2, type: 'general' },
+        { day: '수', time: '14:00', subject: '스토리텔링워크숍', room: '본-301', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '목', time: '10:00', subject: '데이터시각화', room: '경-210', credits: 3, type: 'major' },
+        { day: '목', time: '11:00', subject: '데이터시각화', room: '경-210', credits: 3, type: 'major' },
+        { day: '목', time: '13:00', subject: '비즈니스영어', room: '어-201', credits: 2, type: 'general' },
+        { day: '목', time: '14:00', subject: '비즈니스영어', room: '어-201', credits: 2, type: 'general' },
       ],
     },
     {
       id: 6,
-      name: '강태현',
+      name: '강00',
       studentId: '20200045',
       department: '미디어디자인학과',
       year: '4학년',
@@ -178,30 +252,41 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
       academicYear: '2023',
       gpa: 4.05,
       slots: [
-        { day: '월', time: '09:00', subject: '모션그래픽스', room: '미-201', credits: 3, type: 'major' },
-        { day: '월', time: '11:00', subject: 'UX프로토타이핑', room: '미-304', credits: 3, type: 'major' },
-        { day: '월', time: '15:00', subject: '창의글쓰기', room: '본-210', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '월', time: '10:00', subject: '모션그래픽스', room: '미-201', credits: 3, type: 'major' },
+        { day: '월', time: '11:00', subject: '모션그래픽스', room: '미-201', credits: 3, type: 'major' },
+        { day: '월', time: '13:00', subject: '모션그래픽스', room: '미-201', credits: 3, type: 'major' },
+        { day: '월', time: '14:00', subject: '모션그래픽스', room: '미-201', credits: 3, type: 'major' },
+        { day: '월', time: '15:00', subject: 'UX프로토타이핑', room: '미-304', credits: 3, type: 'major' },
+        { day: '월', time: '16:00', subject: 'UX프로토타이핑', room: '미-304', credits: 3, type: 'major' },
+        // 2시간 수업
         { day: '화', time: '10:00', subject: '3D애니메이션', room: '미-205', credits: 3, type: 'major' },
-        { day: '화', time: '14:00', subject: '문화콘텐츠기획', room: '미-101', credits: 2, type: 'general' },
-        { day: '수', time: '09:00', subject: '모션그래픽스', room: '미-201', credits: 3, type: 'major' },
-        { day: '수', time: '12:00', subject: '인터랙티브미디어', room: '미-207', credits: 3, type: 'major' },
-        { day: '목', time: '10:00', subject: '3D애니메이션', room: '미-205', credits: 3, type: 'major' },
-        { day: '목', time: '13:00', subject: '디자인세미나', room: '미-209', credits: 2, type: 'major' },
-        { day: '금', time: '11:00', subject: '사진예술', room: '미-102', credits: 2, type: 'general' },
+        { day: '화', time: '11:00', subject: '3D애니메이션', room: '미-205', credits: 3, type: 'major' },
+        { day: '화', time: '13:00', subject: '3D애니메이션', room: '미-205', credits: 3, type: 'major' },
+        { day: '화', time: '14:00', subject: '3D애니메이션', room: '미-205', credits: 3, type: 'major' },
+        // 2시간 수업
+        { day: '수', time: '10:00', subject: '인터랙티브미디어', room: '미-207', credits: 3, type: 'major' },
+        { day: '수', time: '11:00', subject: '인터랙티브미디어', room: '미-207', credits: 3, type: 'major' },
+        { day: '수', time: '13:00', subject: '문화콘텐츠기획', room: '미-101', credits: 2, type: 'general' },
+        { day: '수', time: '14:00', subject: '문화콘텐츠기획', room: '미-101', credits: 2, type: 'general' },
+        // 2시간 수업
+        { day: '목', time: '10:00', subject: '디자인세미나', room: '미-209', credits: 2, type: 'major' },
+        { day: '목', time: '11:00', subject: '디자인세미나', room: '미-209', credits: 2, type: 'major' },
+        { day: '목', time: '13:00', subject: '창의글쓰기', room: '본-210', credits: 2, type: 'general' },
+        { day: '목', time: '14:00', subject: '창의글쓰기', room: '본-210', credits: 2, type: 'general' },
       ],
     },
   ];
 
   // 필터링된 시간표
   const filteredTimetables = seniorTimetables.filter((timetable) => {
-    const yearMatch = selectedYear === 'all' || timetable.academicYear === selectedYear;
     const departmentMatch = selectedDepartment === 'all' || timetable.department === selectedDepartment;
     const gradeMatch = selectedGrade === 'all' || timetable.year === selectedGrade;
-    return yearMatch && departmentMatch && gradeMatch;
+    return departmentMatch && gradeMatch;
   });
 
   const handleUseTimetable = (name: string) => {
-    toast.success(`${name}의 시간표를 참고용으로 저장했습니다.`);
+    toast.success(`${formatName(name)}의 시간표를 참고용으로 저장했습니다.`);
     setTimeout(() => {
       navigate('chatbot');
     }, 1000);
@@ -242,34 +327,31 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
 
             {/* Filters */}
             <div className="flex items-center justify-center gap-3">
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
-                <SelectTrigger className="w-[140px] bg-black/40 border-white/15 text-white">
-                  <SelectValue placeholder="학년도" />
-                </SelectTrigger>
-                <SelectContent className="bg-black/90 border-white/20">
-                  <SelectItem value="all">전체 학년도</SelectItem>
-                  <SelectItem value="2024">2024학년도</SelectItem>
-                  <SelectItem value="2023">2023학년도</SelectItem>
-                </SelectContent>
-              </Select>
-
               <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                <SelectTrigger className="w-[160px] bg-black/40 border-white/15 text-white">
-                  <SelectValue placeholder="학과" />
+                <SelectTrigger className="w-[180px] bg-black/40 border-white/20 text-white focus:border-purple-500/50">
+                  <SelectValue placeholder="전체 학과" />
                 </SelectTrigger>
-                <SelectContent className="bg-black/90 border-white/20">
+                <SelectContent className="bg-black/95 border-white/20 text-white">
                   <SelectItem value="all">전체 학과</SelectItem>
                   <SelectItem value="컴퓨터공학과">컴퓨터공학과</SelectItem>
+                  <SelectItem value="소프트웨어학과">소프트웨어학과</SelectItem>
+                  <SelectItem value="전자공학과">전자공학과</SelectItem>
+                  <SelectItem value="전자컴퓨터공학과">전자컴퓨터공학과</SelectItem>
                   <SelectItem value="경영학과">경영학과</SelectItem>
+                  <SelectItem value="경제학과">경제학과</SelectItem>
+                  <SelectItem value="국어국문학과">국어국문학과</SelectItem>
+                  <SelectItem value="영어영문학과">영어영문학과</SelectItem>
+                  <SelectItem value="미디어디자인학과">미디어디자인학과</SelectItem>
                 </SelectContent>
               </Select>
 
               <Select value={selectedGrade} onValueChange={setSelectedGrade}>
-                <SelectTrigger className="w-[140px] bg-black/40 border-white/15 text-white">
-                  <SelectValue placeholder="학년" />
+                <SelectTrigger className="w-[140px] bg-black/40 border-white/20 text-white focus:border-purple-500/50">
+                  <SelectValue placeholder="전체 학년" />
                 </SelectTrigger>
-                <SelectContent className="bg-black/90 border-white/20">
+                <SelectContent className="bg-black/95 border-white/20 text-white">
                   <SelectItem value="all">전체 학년</SelectItem>
+                  <SelectItem value="1학년">1학년</SelectItem>
                   <SelectItem value="2학년">2학년</SelectItem>
                   <SelectItem value="3학년">3학년</SelectItem>
                   <SelectItem value="4학년">4학년</SelectItem>
@@ -299,7 +381,7 @@ export default function SeniorTimetablesScreen({ navigate }: SeniorTimetablesScr
                   <div className="p-5 border-b border-white/10 bg-white/5">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="text-white mb-1">{timetable.name}</h3>
+                        <h3 className="text-white mb-1">{formatName(timetable.name)}</h3>
                         <p className="text-white/50 text-sm">{timetable.department}</p>
                         <p className="text-white/40 text-xs mt-1">
                           {timetable.studentId} · {timetable.year} · {timetable.academicYear}년 {timetable.semester}
