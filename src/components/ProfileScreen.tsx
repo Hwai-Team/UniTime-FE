@@ -13,11 +13,8 @@ import type { User } from '../App';
 import Logo from './Logo';
 import { Calendar, Sparkles } from 'lucide-react';
 import { convertApiItemsToTimeSlots, generateTimetableTitle, calculateCredits } from '../lib/timetableUtils';
-import { 
+import {
   getMyProfile,
-  getRepresentativeTimetable,
-  getSavedTimetables,
-  deleteAIGeneratedTimetable,
   createTimetable,
   deleteTimetable as deleteTimetableApi,
   getMyTimetables,

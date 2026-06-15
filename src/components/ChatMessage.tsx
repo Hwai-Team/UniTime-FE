@@ -7,6 +7,7 @@ interface Message {
   text: string;
   sender: 'user' | 'ai';
   timestamp: Date;
+  animate?: boolean;
 }
 
 interface ChatMessageProps {

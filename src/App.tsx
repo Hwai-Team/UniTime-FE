@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import WelcomeScreen from './components/WelcomeScreen';
-import ChatbotScreen from './components/ChatbotScreen';
-import LoginScreen from './components/LoginScreen';
-import SignupScreen from './components/SignupScreen';
-import ProfileScreen from './components/ProfileScreen';
-import ProfileEditScreen from './components/ProfileEditScreen';
-import TimetableEditScreen from './components/TimetableEditScreen';
-import SeniorTimetablesScreen from './components/SeniorTimetablesScreen';
+import { useState, Suspense, lazy } from 'react';
 import { Toaster } from './components/ui/sonner';
+
+const WelcomeScreen = lazy(() => import('./components/WelcomeScreen'));
+const ChatbotScreen = lazy(() => import('./components/ChatbotScreen'));
+const LoginScreen = lazy(() => import('./components/LoginScreen'));
+const SignupScreen = lazy(() => import('./components/SignupScreen'));
+const ProfileScreen = lazy(() => import('./components/ProfileScreen'));
+const ProfileEditScreen = lazy(() => import('./components/ProfileEditScreen'));
+const TimetableEditScreen = lazy(() => import('./components/TimetableEditScreen'));
+const SeniorTimetablesScreen = lazy(() => import('./components/SeniorTimetablesScreen'));
 
 export interface User {
   email: string;
@@ -85,6 +86,7 @@ export default function App() {
         }}
         richColors
       />
+      <Suspense fallback={null}>
       {currentScreen === 'welcome' && (
         <WelcomeScreen onStartChat={handleStartChat} navigate={navigate} user={user} />
       )}
@@ -127,6 +129,7 @@ export default function App() {
       {currentScreen === 'seniorTimetables' && (
         <SeniorTimetablesScreen navigate={navigate} />
       )}
+      </Suspense>
     </div>
   );
 }

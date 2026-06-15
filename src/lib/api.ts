@@ -572,21 +572,3 @@ export async function getTimetableSummary(userId: number) {
     { method: 'GET' },
   );
 }
-
-// 아래 API들은 현재 화면에서 직접 사용되지 않지만, import 오류를 방지하기 위해
-// 기본 형태의 목 함수를 제공합니다.
-
-export async function getRepresentativeTimetable() {
-  await new Promise((r) => setTimeout(r, 200));
-  return { success: true, data: null as any };
-}
-
-export async function getSavedTimetables() {
-  await new Promise((r) => setTimeout(r, 200));
-  return { success: true, data: [] as any[] };
-}
-
-export async function deleteAIGeneratedTimetable(_id: string) {
-  await new Promise((r) => setTimeout(r, 200));
-  return { success: true };
-}
