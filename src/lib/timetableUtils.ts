@@ -17,7 +17,7 @@ export interface ApiCourseItem {
   credit: number;
   professor: string;
   courseName: string;
-  dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+  dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
   startPeriod: number;
   endPeriod: number;
   room: string;

@@ -496,7 +496,7 @@ export interface AIGenerateTimetableResponse {
   semester: number;
   items: Array<{
     courseName: string;
-    dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN';
+    dayOfWeek: 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI';
     startPeriod: number;
     endPeriod: number;
     room: string;

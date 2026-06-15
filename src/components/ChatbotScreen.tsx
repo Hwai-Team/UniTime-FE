@@ -427,9 +427,7 @@ export default function ChatbotScreen({
             | 'TUE'
             | 'WED'
             | 'THU'
-            | 'FRI'
-            | 'SAT'
-            | 'SUN',
+            | 'FRI',
           startPeriod: item.startPeriod,
           endPeriod: item.endPeriod,
           room: item.room || '',
@@ -498,7 +496,13 @@ export default function ChatbotScreen({
         planKey, // 🔥 플랜 정보 전달
       });
 
-      const apiItems: ApiCourseItem[] = res.items.map(
+      // MON-FRI만 허용 (학교 시간표에는 토/일이 없음)
+      const filteredItems = res.items.filter(
+        (item: any) =>
+          ['MON', 'TUE', 'WED', 'THU', 'FRI'].includes(item.dayOfWeek)
+      );
+
+      const apiItems: ApiCourseItem[] = filteredItems.map(
         (item: any, index: number) => ({
           id: item.id ?? index + 1,
           courseId: item.courseId ?? index + 1,
@@ -510,9 +514,7 @@ export default function ChatbotScreen({
             | 'TUE'
             | 'WED'
             | 'THU'
-            | 'FRI'
-            | 'SAT'
-            | 'SUN',
+            | 'FRI',
           startPeriod: item.startPeriod,
           endPeriod: item.endPeriod,
           room: item.room || '',
